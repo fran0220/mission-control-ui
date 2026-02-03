@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { getObjectUrl } from "@/lib/minio";
 
-const CATEGORY_ORDER = ["concept", "direction-c", "direction-c-v2", "cmf", "renders"];
+const CATEGORY_ORDER = ["release", "concept", "direction-c", "direction-c-v2", "cmf", "renders"];
+const RELEASE_V1_PREFIX = "designs/release/v1.0/";
 
 type Asset = {
   path: string;
@@ -46,7 +47,7 @@ export default function DesignsPage() {
     let canceled = false;
     setLoading(true);
     setError(null);
-    
+
     fetch("/api/designs")
       .then((res) => {
         if (!res.ok) throw new Error("fetch_failed");
@@ -56,7 +57,7 @@ export default function DesignsPage() {
         if (canceled) return;
         const allAssets = Array.isArray(data.assets) ? data.assets : [];
         // 只显示图片文件
-        const imageAssets = allAssets.filter((a: Asset) => 
+        const imageAssets = allAssets.filter((a: Asset) =>
           /\.(png|jpg|jpeg|gif|webp)$/i.test(a.name)
         );
         setAssets(imageAssets);
@@ -74,32 +75,38 @@ export default function DesignsPage() {
     };
   }, []);
 
+  const releaseAssets = useMemo(() => {
+    return assets
+      .filter((asset) => asset.path.startsWith(RELEASE_V1_PREFIX))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [assets]);
+
   // 构建目录结构
   const directories = useMemo(() => {
     const dirMap = new Map<string, Asset[]>();
-    
+
     assets.forEach((asset) => {
       // 从路径提取目录 designs/concept/direction-c-v2/xxx.png -> concept/direction-c-v2
       const pathParts = asset.path.replace(/^designs\//, "").split("/");
       pathParts.pop(); // 移除文件名
       const dir = pathParts.join("/") || "root";
-      
+
       if (!dirMap.has(dir)) {
         dirMap.set(dir, []);
       }
       dirMap.get(dir)!.push(asset);
     });
-    
+
     // 排序目录
     const sortedDirs = Array.from(dirMap.keys()).sort((a, b) => {
-      const aIdx = CATEGORY_ORDER.findIndex(c => a.includes(c));
-      const bIdx = CATEGORY_ORDER.findIndex(c => b.includes(c));
+      const aIdx = CATEGORY_ORDER.findIndex((c) => a.includes(c));
+      const bIdx = CATEGORY_ORDER.findIndex((c) => b.includes(c));
       if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
       if (aIdx === -1) return 1;
       if (bIdx === -1) return -1;
       return aIdx - bIdx;
     });
-    
+
     return { map: dirMap, sorted: sortedDirs };
   }, [assets]);
 
@@ -113,108 +120,145 @@ export default function DesignsPage() {
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-12 gap-6">
-        {/* 左侧目录导航 */}
-        <aside className="col-span-12 md:col-span-3 space-y-4">
-          <div className="bg-white border border-stone-200 rounded-lg p-4">
-            <h2 className="text-sm font-semibold text-stone-500 uppercase tracking-wide mb-3">
-              📁 目录导航
-            </h2>
-            <ul className="space-y-1">
-              <li>
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* v1.0 正式版本专区 */}
+        <section className="bg-white border border-amber-200 rounded-xl p-4 md:p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-amber-700">v1.0 正式版本</h2>
+              <p className="text-xs text-stone-400">designs/release/v1.0 · {releaseAssets.length} 张</p>
+            </div>
+            <span className="text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">
+              FINAL
+            </span>
+          </div>
+          {loading ? (
+            <div className="text-stone-400 text-sm text-center py-8">⏳ 加载中...</div>
+          ) : error ? (
+            <div className="text-rose-500 text-sm text-center py-8">❌ {error}</div>
+          ) : releaseAssets.length === 0 ? (
+            <div className="text-stone-400 text-sm text-center py-8">暂无 v1.0 图片</div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {releaseAssets.map((asset) => (
                 <button
-                  onClick={() => setActiveCategory("all")}
-                  className={`w-full text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center justify-between ${
-                    activeCategory === "all"
-                      ? "bg-amber-100 text-amber-700"
-                      : "hover:bg-stone-100 text-stone-600"
-                  }`}
+                  key={asset.path}
+                  onClick={() => setPreview(asset)}
+                  className="group relative aspect-square bg-stone-100 border border-stone-200 rounded-lg overflow-hidden hover:shadow-lg hover:border-amber-300 transition-all"
                 >
-                  <span className="truncate">📂 全部</span>
-                  <span className="text-xs text-stone-400">{assets.length}</span>
+                  <img
+                    src={getObjectUrl(asset.path)}
+                    alt={asset.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                    <p className="text-white text-xs truncate font-medium">{asset.name}</p>
+                    <p className="text-white/70 text-[10px]">
+                      {formatFileSize(asset.size)} · {formatDate(asset.lastModified)}
+                    </p>
+                  </div>
                 </button>
-              </li>
-              {directories.sorted.map((dir) => (
-                <li key={dir}>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <div className="grid grid-cols-12 gap-6">
+          {/* 左侧目录导航 */}
+          <aside className="col-span-12 md:col-span-3 space-y-4">
+            <div className="bg-white border border-stone-200 rounded-lg p-4">
+              <h2 className="text-sm font-semibold text-stone-500 uppercase tracking-wide mb-3">
+                📁 目录导航
+              </h2>
+              <ul className="space-y-1">
+                <li>
                   <button
-                    onClick={() => setActiveCategory(dir)}
+                    onClick={() => setActiveCategory("all")}
                     className={`w-full text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center justify-between ${
-                      activeCategory === dir
+                      activeCategory === "all"
                         ? "bg-amber-100 text-amber-700"
                         : "hover:bg-stone-100 text-stone-600"
                     }`}
                   >
-                    <span className="truncate">📁 {dir}</span>
-                    <span className="text-xs text-stone-400">
-                      {directories.map.get(dir)?.length || 0}
-                    </span>
+                    <span className="truncate">📂 全部</span>
+                    <span className="text-xs text-stone-400">{assets.length}</span>
                   </button>
                 </li>
-              ))}
-            </ul>
-          </div>
-          
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <p className="text-sm text-amber-700">
-              💡 <strong>提示</strong><br/>
-              • 点击图片查看大图<br/>
-              • 共 {assets.length} 张设计图
-            </p>
-          </div>
-        </aside>
-
-        {/* 右侧图片网格 */}
-        <main className="col-span-12 md:col-span-9 bg-white border border-stone-200 rounded-lg overflow-hidden">
-          <div className="h-12 px-4 flex items-center border-b border-stone-100 bg-stone-50 gap-3">
-            <span className="text-sm font-semibold text-stone-600">
-              🖼️ {activeCategory === "all" ? "全部设计" : activeCategory}
-            </span>
-            <span className="text-xs text-stone-400">
-              ({displayAssets.length} 张)
-            </span>
-          </div>
-
-          <div className="p-6">
-            {loading ? (
-              <div className="text-stone-400 text-sm text-center py-12">
-                ⏳ 加载中...
-              </div>
-            ) : error ? (
-              <div className="text-rose-500 text-sm text-center py-12">
-                ❌ {error}
-              </div>
-            ) : displayAssets.length === 0 ? (
-              <div className="text-stone-400 text-sm text-center py-12">
-                暂无图片
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {displayAssets.map((asset) => (
-                  <button
-                    key={asset.path}
-                    onClick={() => setPreview(asset)}
-                    className="group relative aspect-square bg-stone-100 border border-stone-200 rounded-lg overflow-hidden hover:shadow-lg hover:border-amber-300 transition-all"
-                  >
-                    <img
-                      src={getObjectUrl(asset.path)}
-                      alt={asset.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2">
-                      <p className="text-white text-xs truncate font-medium">
-                        {asset.name}
-                      </p>
-                      <p className="text-white/70 text-[10px]">
-                        {formatFileSize(asset.size)} · {formatDate(asset.lastModified)}
-                      </p>
-                    </div>
-                  </button>
+                {directories.sorted.map((dir) => (
+                  <li key={dir}>
+                    <button
+                      onClick={() => setActiveCategory(dir)}
+                      className={`w-full text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center justify-between ${
+                        activeCategory === dir
+                          ? "bg-amber-100 text-amber-700"
+                          : "hover:bg-stone-100 text-stone-600"
+                      }`}
+                    >
+                      <span className="truncate">📁 {dir}</span>
+                      <span className="text-xs text-stone-400">
+                        {directories.map.get(dir)?.length || 0}
+                      </span>
+                    </button>
+                  </li>
                 ))}
-              </div>
-            )}
-          </div>
-        </main>
+              </ul>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <p className="text-sm text-amber-700">
+                💡 <strong>提示</strong>
+                <br />
+                • 点击图片查看大图
+                <br />
+                • 共 {assets.length} 张设计图
+              </p>
+            </div>
+          </aside>
+
+          {/* 右侧图片网格 */}
+          <main className="col-span-12 md:col-span-9 bg-white border border-stone-200 rounded-lg overflow-hidden">
+            <div className="h-12 px-4 flex items-center border-b border-stone-100 bg-stone-50 gap-3">
+              <span className="text-sm font-semibold text-stone-600">
+                🖼️ {activeCategory === "all" ? "全部设计" : activeCategory}
+              </span>
+              <span className="text-xs text-stone-400">({displayAssets.length} 张)</span>
+            </div>
+
+            <div className="p-6">
+              {loading ? (
+                <div className="text-stone-400 text-sm text-center py-12">⏳ 加载中...</div>
+              ) : error ? (
+                <div className="text-rose-500 text-sm text-center py-12">❌ {error}</div>
+              ) : displayAssets.length === 0 ? (
+                <div className="text-stone-400 text-sm text-center py-12">暂无图片</div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {displayAssets.map((asset) => (
+                    <button
+                      key={asset.path}
+                      onClick={() => setPreview(asset)}
+                      className="group relative aspect-square bg-stone-100 border border-stone-200 rounded-lg overflow-hidden hover:shadow-lg hover:border-amber-300 transition-all"
+                    >
+                      <img
+                        src={getObjectUrl(asset.path)}
+                        alt={asset.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                        <p className="text-white text-xs truncate font-medium">{asset.name}</p>
+                        <p className="text-white/70 text-[10px]">
+                          {formatFileSize(asset.size)} · {formatDate(asset.lastModified)}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </main>
+        </div>
       </div>
 
       {/* 预览弹窗 */}

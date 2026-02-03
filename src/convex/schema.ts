@@ -55,6 +55,12 @@ export default defineSchema({
         v.literal("done")
       )
     ),
+    canvasPosition: v.optional(
+      v.object({
+        x: v.number(),
+        y: v.number(),
+      })
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_status", ["status"])

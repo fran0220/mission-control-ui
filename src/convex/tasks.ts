@@ -65,6 +65,12 @@ export const create = mutation({
     assigneeIds: v.optional(v.array(v.id("agents"))),
     createdBy: v.optional(v.id("agents")),
     dueDate: v.optional(v.number()),
+    canvasPosition: v.optional(
+      v.object({
+        x: v.number(),
+        y: v.number(),
+      })
+    ),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -83,6 +89,7 @@ export const create = mutation({
       stateChangedAt: now,
       isBlocked: false,
       originalStatus: undefined,
+      canvasPosition: args.canvasPosition,
       createdAt: now,
       updatedAt: now,
     });
@@ -216,6 +223,12 @@ export const update = mutation({
       )
     ),
     dueDate: v.optional(v.number()),
+    canvasPosition: v.optional(
+      v.object({
+        x: v.number(),
+        y: v.number(),
+      })
+    ),
   },
   handler: async (ctx, args) => {
     const { taskId, ...updates } = args;
@@ -380,6 +393,7 @@ export const quickCreate = mutation({
       stateChangedAt: now,
       isBlocked: false,
       originalStatus: undefined,
+      canvasPosition: undefined,
       createdAt: now,
       updatedAt: now,
     });
