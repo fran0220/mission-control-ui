@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Activity, 
@@ -18,7 +19,9 @@ import {
   Zap,
   LayoutGrid,
   Inbox,
-  AlertTriangle
+  AlertTriangle,
+  ChevronRight,
+  ArrowRight
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -27,29 +30,33 @@ type TaskStatus = "inbox" | "assigned" | "in_progress" | "review" | "blocked" | 
 type Priority = "P0" | "P1" | "P2" | "P3";
 
 const statusConfig: Record<TaskStatus, { label: string; color: string; bgColor: string; icon: React.ComponentType<any> }> = {
-  inbox: { label: "收件箱", color: "text-slate-400", bgColor: "bg-slate-500/10", icon: Inbox },
-  assigned: { label: "已分配", color: "text-blue-400", bgColor: "bg-blue-500/10", icon: Users },
-  in_progress: { label: "进行中", color: "text-cyan-400", bgColor: "bg-cyan-500/10", icon: Play },
-  review: { label: "待审核", color: "text-purple-400", bgColor: "bg-purple-500/10", icon: Eye },
-  blocked: { label: "已阻塞", color: "text-red-400", bgColor: "bg-red-500/10", icon: Pause },
-  done: { label: "已完成", color: "text-emerald-400", bgColor: "bg-emerald-500/10", icon: CheckCircle2 },
+  inbox: { label: "收件箱", color: "text-slate-400", bgColor: "bg-slate-500/20", icon: Inbox },
+  assigned: { label: "已分配", color: "text-blue-400", bgColor: "bg-blue-500/20", icon: Users },
+  in_progress: { label: "进行中", color: "text-cyan-400", bgColor: "bg-cyan-500/20", icon: Play },
+  review: { label: "待审核", color: "text-purple-400", bgColor: "bg-purple-500/20", icon: Eye },
+  blocked: { label: "已阻塞", color: "text-red-400", bgColor: "bg-red-500/20", icon: Pause },
+  done: { label: "已完成", color: "text-emerald-400", bgColor: "bg-emerald-500/20", icon: CheckCircle2 },
 };
 
+const statusFlow: TaskStatus[] = ["inbox", "assigned", "in_progress", "review", "done"];
+
 const priorityConfig: Record<Priority, { label: string; color: string; bg: string; border: string }> = {
-  P0: { label: "P0 紧急", color: "text-red-400", bg: "bg-red-500/20", border: "border-red-500/50" },
-  P1: { label: "P1 高", color: "text-orange-400", bg: "bg-orange-500/20", border: "border-orange-500/50" },
-  P2: { label: "P2 中", color: "text-blue-400", bg: "bg-blue-500/20", border: "border-blue-500/50" },
-  P3: { label: "P3 低", color: "text-slate-400", bg: "bg-slate-500/20", border: "border-slate-500/50" },
+  P0: { label: "P0", color: "text-red-400", bg: "bg-red-500/20", border: "border-red-500/50" },
+  P1: { label: "P1", color: "text-orange-400", bg: "bg-orange-500/20", border: "border-orange-500/50" },
+  P2: { label: "P2", color: "text-blue-400", bg: "bg-blue-500/20", border: "border-blue-500/50" },
+  P3: { label: "P3", color: "text-slate-400", bg: "bg-slate-500/20", border: "border-slate-500/50" },
 };
 
 export default function MissionControl() {
   const [activeTab, setActiveTab] = useState<"tasks" | "status">("tasks");
+  const [selectedTaskId, setSelectedTaskId] = useState<Id<"tasks"> | null>(null);
 
   const agents = useQuery(api.agents.list);
   const tasks = useQuery(api.tasks.list);
   const activities = useQuery(api.activities.getRecent, { limit: 50 });
 
   const activeAgents = agents?.filter(a => a.status === "active").length || 0;
+  const selectedTask = tasks?.find(t => t._id === selectedTaskId);
 
   return (
     <div className="min-h-screen bg-mc-bg grid-pattern">
@@ -57,7 +64,6 @@ export default function MissionControl() {
       <header className="border-b border-mc-border bg-mc-panel/90 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-[1600px] mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            {/* Logo */}
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-lg bg-mc-accent/20 border border-mc-accent flex items-center justify-center">
                 <Zap className="w-6 h-6 text-mc-accent" />
@@ -70,7 +76,6 @@ export default function MissionControl() {
               </div>
             </div>
 
-            {/* Navigation */}
             <nav className="flex items-center gap-1 bg-mc-bg/50 p-1 rounded-lg border border-mc-border">
               <button
                 onClick={() => setActiveTab("tasks")}
@@ -96,7 +101,6 @@ export default function MissionControl() {
               </button>
             </nav>
 
-            {/* Status indicator */}
             <div className="flex items-center gap-3 text-sm">
               <div className="flex items-center gap-2 px-3 py-1.5 bg-mc-bg/50 rounded-lg border border-mc-border">
                 <Circle className={`w-2 h-2 ${activeAgents > 0 ? "fill-mc-success text-mc-success animate-pulse" : "fill-mc-muted text-mc-muted"}`} />
@@ -109,11 +113,16 @@ export default function MissionControl() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-[1600px] mx-auto p-6">
         <AnimatePresence mode="wait">
           {activeTab === "tasks" ? (
-            <TasksBoard key="tasks" tasks={tasks} agents={agents} />
+            <TasksView 
+              key="tasks" 
+              tasks={tasks} 
+              agents={agents}
+              selectedTaskId={selectedTaskId}
+              onSelectTask={setSelectedTaskId}
+            />
           ) : (
             <StatusView key="status" agents={agents} tasks={tasks} activities={activities} />
           )}
@@ -124,137 +133,291 @@ export default function MissionControl() {
 }
 
 // ============================================
-// Tasks Board - Full Kanban View
+// Tasks View - Master-Detail Layout
 // ============================================
-function TasksBoard({ tasks, agents }: { tasks: any; agents: any }) {
-  const columns: TaskStatus[] = ["inbox", "assigned", "in_progress", "review", "blocked", "done"];
+function TasksView({ 
+  tasks, 
+  agents, 
+  selectedTaskId, 
+  onSelectTask 
+}: { 
+  tasks: any; 
+  agents: any; 
+  selectedTaskId: Id<"tasks"> | null;
+  onSelectTask: (id: Id<"tasks"> | null) => void;
+}) {
+  const selectedTask = tasks?.find((t: any) => t._id === selectedTaskId);
+  
+  // 按优先级和时间排序
+  const sortedTasks = tasks?.slice().sort((a: any, b: any) => {
+    const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
+    const pDiff = priorityOrder[a.priority as Priority] - priorityOrder[b.priority as Priority];
+    if (pDiff !== 0) return pDiff;
+    return b.createdAt - a.createdAt;
+  });
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="flex gap-4 overflow-x-auto pb-4"
+      className="flex gap-6 h-[calc(100vh-140px)]"
     >
-      {columns.map((status, colIndex) => {
-        const columnTasks = tasks?.filter((t: any) => t.status === status) || [];
-        const config = statusConfig[status];
-        
-        return (
-          <motion.div 
-            key={status} 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: colIndex * 0.05 }}
-            className="flex-shrink-0 w-72"
-          >
-            {/* Column Header */}
-            <div className={`flex items-center gap-2 mb-4 px-3 py-2 rounded-lg ${config.bgColor} border border-mc-border/50`}>
-              <config.icon className={`w-4 h-4 ${config.color}`} />
-              <h3 className={`font-display text-sm uppercase tracking-wider ${config.color}`}>
-                {config.label}
-              </h3>
-              <span className={`ml-auto text-xs font-bold ${config.color} bg-mc-bg/50 px-2 py-0.5 rounded`}>
-                {columnTasks.length}
+      {/* Left: Task List */}
+      <div className="w-96 flex-shrink-0 flex flex-col">
+        <div className="bg-mc-panel border border-mc-border rounded-lg flex flex-col h-full">
+          <div className="p-4 border-b border-mc-border">
+            <h2 className="text-sm font-display uppercase tracking-wider text-mc-accent flex items-center gap-2">
+              <ListTodo className="w-4 h-4" />
+              任务列表
+              <span className="ml-auto text-xs bg-mc-bg px-2 py-0.5 rounded text-mc-muted">
+                {tasks?.length || 0}
               </span>
-            </div>
-
-            {/* Tasks */}
-            <div className="space-y-3 min-h-[200px]">
-              {columnTasks.map((task: any, taskIndex: number) => (
-                <TaskCard 
-                  key={task._id} 
-                  task={task} 
-                  agents={agents}
-                  delay={taskIndex * 0.03}
-                />
-              ))}
-              {columnTasks.length === 0 && (
-                <div className="flex items-center justify-center h-24 border border-dashed border-mc-border/30 rounded-lg">
-                  <p className="text-xs text-mc-muted/50">暂无任务</p>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        );
-      })}
-    </motion.div>
-  );
-}
-
-function TaskCard({ task, agents, delay }: { task: any; agents: any; delay: number }) {
-  const priorityConf = priorityConfig[task.priority as Priority];
-  const assignees = agents?.filter((a: any) => task.assigneeIds?.includes(a._id)) || [];
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay }}
-      className="bg-mc-panel border border-mc-border rounded-lg p-4 hover:border-mc-accent/30 transition-all group"
-    >
-      {/* Header: Priority & Date */}
-      <div className="flex items-center justify-between mb-3">
-        <span className={`text-xs px-2 py-0.5 rounded border ${priorityConf.bg} ${priorityConf.border} ${priorityConf.color} font-medium`}>
-          {priorityConf.label}
-        </span>
-        {task.dueDate && (
-          <span className="text-xs text-mc-muted flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {format(task.dueDate, "MM/dd")}
-          </span>
-        )}
+            </h2>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {sortedTasks?.map((task: any) => {
+              const priorityConf = priorityConfig[task.priority as Priority];
+              const statusConf = statusConfig[task.status as TaskStatus];
+              const isSelected = task._id === selectedTaskId;
+              
+              return (
+                <button
+                  key={task._id}
+                  onClick={() => onSelectTask(task._id)}
+                  className={`w-full text-left p-3 rounded-lg transition-all ${
+                    isSelected 
+                      ? "bg-mc-accent/20 border border-mc-accent" 
+                      : "bg-mc-bg/50 border border-transparent hover:border-mc-border hover:bg-mc-bg"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${priorityConf.bg} ${priorityConf.color} font-bold flex-shrink-0`}>
+                      {task.priority}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <h4 className={`font-medium truncate ${isSelected ? "text-mc-accent" : "text-mc-text"}`}>
+                        {task.title}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`text-xs ${statusConf.color}`}>{statusConf.label}</span>
+                        <span className="text-xs text-mc-muted">·</span>
+                        <span className="text-xs text-mc-muted">
+                          {formatDistanceToNow(task.createdAt, { addSuffix: true, locale: zhCN })}
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronRight className={`w-4 h-4 flex-shrink-0 ${isSelected ? "text-mc-accent" : "text-mc-muted"}`} />
+                  </div>
+                </button>
+              );
+            })}
+            
+            {(!tasks || tasks.length === 0) && (
+              <div className="flex flex-col items-center justify-center h-48 text-mc-muted/50">
+                <Inbox className="w-12 h-12 mb-3 opacity-30" />
+                <p className="text-sm">暂无任务</p>
+                <p className="text-xs mt-1">通过 Telegram 创建新任务</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Title */}
-      <h4 className="font-medium text-mc-text mb-2 group-hover:text-mc-accent transition-colors">
-        {task.title}
-      </h4>
-
-      {/* Description */}
-      {task.description && (
-        <p className="text-xs text-mc-muted line-clamp-2 mb-3">
-          {task.description}
-        </p>
-      )}
-
-      {/* Footer: Assignees & Time */}
-      <div className="flex items-center justify-between pt-3 border-t border-mc-border/50">
-        {/* Assignees */}
-        <div className="flex items-center gap-2">
-          {assignees.length > 0 ? (
-            <>
-              <div className="flex -space-x-2">
-                {assignees.slice(0, 3).map((agent: any) => (
-                  <div
-                    key={agent._id}
-                    className="w-6 h-6 rounded-full bg-mc-accent/20 border-2 border-mc-panel flex items-center justify-center text-[10px] font-bold text-mc-accent"
-                    title={agent.name}
-                  >
-                    {agent.name[0]}
-                  </div>
-                ))}
-              </div>
-              {assignees.length > 3 && (
-                <span className="text-xs text-mc-muted">+{assignees.length - 3}</span>
-              )}
-            </>
+      {/* Right: Task Detail */}
+      <div className="flex-1">
+        <AnimatePresence mode="wait">
+          {selectedTask ? (
+            <TaskDetail key={selectedTask._id} task={selectedTask} agents={agents} />
           ) : (
-            <span className="text-xs text-mc-muted/50">未分配</span>
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="h-full flex items-center justify-center bg-mc-panel border border-mc-border rounded-lg"
+            >
+              <div className="text-center text-mc-muted/50">
+                <ListTodo className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                <p className="text-lg">选择一个任务查看详情</p>
+              </div>
+            </motion.div>
           )}
-        </div>
-
-        {/* Created time */}
-        <span className="text-xs text-mc-muted/70">
-          {formatDistanceToNow(task.createdAt, { addSuffix: true, locale: zhCN })}
-        </span>
+        </AnimatePresence>
       </div>
     </motion.div>
   );
 }
 
 // ============================================
-// Status View - Agents & Activity
+// Task Detail Component
+// ============================================
+function TaskDetail({ task, agents }: { task: any; agents: any }) {
+  const priorityConf = priorityConfig[task.priority as Priority];
+  const statusConf = statusConfig[task.status as TaskStatus];
+  const assignees = agents?.filter((a: any) => task.assigneeIds?.includes(a._id)) || [];
+  const creator = agents?.find((a: any) => a._id === task.createdBy);
+
+  // 获取当前状态在流程中的位置
+  const currentStatusIndex = statusFlow.indexOf(task.status);
+  const isBlocked = task.status === "blocked";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="h-full bg-mc-panel border border-mc-border rounded-lg flex flex-col"
+    >
+      {/* Header */}
+      <div className="p-6 border-b border-mc-border">
+        <div className="flex items-start gap-4">
+          <span className={`text-sm px-2 py-1 rounded border ${priorityConf.bg} ${priorityConf.border} ${priorityConf.color} font-bold`}>
+            {priorityConf.label}
+          </span>
+          <div className="flex-1">
+            <h2 className="text-xl font-display font-bold text-mc-text mb-2">{task.title}</h2>
+            <div className="flex items-center gap-4 text-sm text-mc-muted">
+              <span className="flex items-center gap-1">
+                <Clock className="w-4 h-4" />
+                创建于 {format(task.createdAt, "yyyy-MM-dd HH:mm", { locale: zhCN })}
+              </span>
+              {creator && (
+                <span className="flex items-center gap-1">
+                  <Bot className="w-4 h-4" />
+                  {creator.name}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Status Flow */}
+      <div className="p-6 border-b border-mc-border">
+        <h3 className="text-xs font-display uppercase tracking-wider text-mc-muted mb-4">状态流转</h3>
+        
+        {isBlocked ? (
+          <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+            <AlertTriangle className="w-6 h-6 text-red-400" />
+            <div>
+              <p className="text-red-400 font-medium">任务已阻塞</p>
+              <p className="text-xs text-mc-muted mt-1">需要解决阻塞问题后继续</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            {statusFlow.map((status, index) => {
+              const conf = statusConfig[status];
+              const isCompleted = index < currentStatusIndex;
+              const isCurrent = index === currentStatusIndex;
+              const isPending = index > currentStatusIndex;
+              
+              return (
+                <div key={status} className="flex items-center">
+                  {/* Status Node */}
+                  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
+                    isCurrent 
+                      ? `${conf.bgColor} border-current ${conf.color}` 
+                      : isCompleted
+                        ? "bg-mc-success/20 border-mc-success/50 text-mc-success"
+                        : "bg-mc-bg border-mc-border text-mc-muted/50"
+                  }`}>
+                    <conf.icon className="w-4 h-4" />
+                    <span className="text-xs font-medium">{conf.label}</span>
+                  </div>
+                  
+                  {/* Arrow */}
+                  {index < statusFlow.length - 1 && (
+                    <ArrowRight className={`w-4 h-4 mx-1 ${
+                      isCompleted ? "text-mc-success" : "text-mc-muted/30"
+                    }`} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        
+        {/* Current Status Badge */}
+        <div className="mt-4">
+          <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${statusConf.bgColor} ${statusConf.color}`}>
+            <statusConf.icon className="w-4 h-4" />
+            <span className="font-medium">当前状态: {statusConf.label}</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Description */}
+        <div>
+          <h3 className="text-xs font-display uppercase tracking-wider text-mc-muted mb-3">任务描述</h3>
+          <p className="text-mc-text leading-relaxed">
+            {task.description || <span className="text-mc-muted/50">暂无描述</span>}
+          </p>
+        </div>
+
+        {/* Assignees */}
+        <div>
+          <h3 className="text-xs font-display uppercase tracking-wider text-mc-muted mb-3">负责人</h3>
+          {assignees.length > 0 ? (
+            <div className="flex flex-wrap gap-3">
+              {assignees.map((agent: any) => (
+                <div 
+                  key={agent._id}
+                  className="flex items-center gap-3 px-4 py-2 bg-mc-bg rounded-lg border border-mc-border"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-mc-accent/20 border border-mc-accent/30 flex items-center justify-center">
+                    <Bot className="w-4 h-4 text-mc-accent" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-mc-text">{agent.name}</p>
+                    <p className="text-xs text-mc-muted">{agent.role}</p>
+                  </div>
+                  <div className={`w-2 h-2 rounded-full ml-2 ${
+                    agent.status === "active" ? "bg-mc-success" : "bg-mc-muted"
+                  }`} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-mc-muted/50">未分配</p>
+          )}
+        </div>
+
+        {/* Meta Info */}
+        <div>
+          <h3 className="text-xs font-display uppercase tracking-wider text-mc-muted mb-3">其他信息</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-3 bg-mc-bg rounded-lg border border-mc-border">
+              <p className="text-xs text-mc-muted mb-1">优先级</p>
+              <p className={`font-medium ${priorityConf.color}`}>{priorityConf.label}</p>
+            </div>
+            <div className="p-3 bg-mc-bg rounded-lg border border-mc-border">
+              <p className="text-xs text-mc-muted mb-1">最后更新</p>
+              <p className="font-medium text-mc-text">
+                {formatDistanceToNow(task.updatedAt, { addSuffix: true, locale: zhCN })}
+              </p>
+            </div>
+            {task.dueDate && (
+              <div className="p-3 bg-mc-bg rounded-lg border border-mc-border">
+                <p className="text-xs text-mc-muted mb-1">截止日期</p>
+                <p className="font-medium text-mc-text">
+                  {format(task.dueDate, "yyyy-MM-dd", { locale: zhCN })}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================
+// Status View
 // ============================================
 function StatusView({ agents, tasks, activities }: { agents: any; tasks: any; activities: any }) {
   const tasksByStatus = tasks?.reduce((acc: any, task: any) => {
