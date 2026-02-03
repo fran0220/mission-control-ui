@@ -119,4 +119,24 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_agent", ["mentionedAgentId"])
     .index("by_undelivered", ["mentionedAgentId", "delivered"]),
+
+  // 设计资源审批
+  designAssets: defineTable({
+    path: v.string(),
+    name: v.string(),
+    category: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("rejected")
+    ),
+    createdBy: v.optional(v.id("agents")),
+    reviewedBy: v.optional(v.id("agents")),
+    reviewComment: v.optional(v.string()),
+    createdAt: v.number(),
+    reviewedAt: v.optional(v.number()),
+  })
+    .index("by_path", ["path"])
+    .index("by_category", ["category"])
+    .index("by_status", ["status"]),
 });
