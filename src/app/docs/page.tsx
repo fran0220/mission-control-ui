@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { ASSETS, DOC_CATEGORIES, getObjectUrl } from "@/lib/minio";
 
 type Category = keyof typeof ASSETS.docs;
@@ -10,6 +11,7 @@ export default function DocsPage() {
   const [activeCategory, setActiveCategory] = useState<Category>("prd");
   const [activeDoc, setActiveDoc] = useState<string | null>(null);
   const [content, setContent] = useState<string>("");
+  const [loading, setLoading] = useState(false);
 
   const categories = Object.keys(ASSETS.docs) as Category[];
   const currentDocs = ASSETS.docs[activeCategory] || [];
@@ -22,10 +24,17 @@ export default function DocsPage() {
 
   useEffect(() => {
     if (!activeDoc) return;
+    setLoading(true);
     fetch(getObjectUrl(activeDoc))
       .then((res) => res.text())
-      .then(setContent)
-      .catch(() => setContent("# 加载失败\n\n请稍后重试"));
+      .then((text) => {
+        setContent(text);
+        setLoading(false);
+      })
+      .catch(() => {
+        setContent("# 加载失败\n\n请稍后重试");
+        setLoading(false);
+      });
   }, [activeDoc]);
 
   const handleCategoryChange = (cat: Category) => {
@@ -93,11 +102,34 @@ export default function DocsPage() {
           </aside>
 
           {/* 文档内容 */}
-          <main className="col-span-12 md:col-span-9 bg-white border border-stone-200 rounded-lg p-6 prose prose-stone max-w-none">
-            {activeDoc ? (
-              <ReactMarkdown>{content}</ReactMarkdown>
+          <main className="col-span-12 md:col-span-9 bg-white border border-stone-200 rounded-lg p-6 overflow-x-auto">
+            {loading ? (
+              <div className="text-stone-400 text-center py-8">加载中...</div>
+            ) : activeDoc ? (
+              <article className="prose prose-stone prose-sm md:prose-base max-w-none
+                prose-headings:font-bold prose-headings:text-stone-800
+                prose-h1:text-2xl prose-h1:border-b prose-h1:pb-2 prose-h1:mb-4
+                prose-h2:text-xl prose-h2:mt-6 prose-h2:mb-3
+                prose-h3:text-lg
+                prose-p:text-stone-600 prose-p:leading-relaxed
+                prose-a:text-amber-600 prose-a:no-underline hover:prose-a:underline
+                prose-code:bg-stone-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
+                prose-pre:bg-stone-900 prose-pre:text-stone-100
+                prose-table:border-collapse prose-table:w-full
+                prose-th:bg-stone-100 prose-th:border prose-th:border-stone-300 prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold
+                prose-td:border prose-td:border-stone-200 prose-td:px-3 prose-td:py-2
+                prose-tr:even:bg-stone-50
+                prose-ul:list-disc prose-ul:pl-6
+                prose-ol:list-decimal prose-ol:pl-6
+                prose-li:my-1
+                prose-blockquote:border-l-4 prose-blockquote:border-amber-500 prose-blockquote:bg-amber-50 prose-blockquote:pl-4 prose-blockquote:py-2
+              ">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {content}
+                </ReactMarkdown>
+              </article>
             ) : (
-              <p className="text-stone-400">选择一个文档查看</p>
+              <p className="text-stone-400 text-center py-8">选择一个文档查看</p>
             )}
           </main>
         </div>
