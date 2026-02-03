@@ -1,38 +1,33 @@
-import { Client } from "minio";
+// MinIO 公共访问 URL 工具（客户端安全）
+// Bucket 已设置为 public download，直接通过 HTTP 访问
 
-const endpoint = process.env.MINIO_ENDPOINT || "";
-const accessKey = process.env.MINIO_ACCESS_KEY || "";
-const secretKey = process.env.MINIO_SECRET_KEY || "";
-const bucket = process.env.MINIO_BUCKET || "";
-
-const client = new Client({
-  endPoint: endpoint.replace(/^https?:\/\//, ""),
-  useSSL: endpoint.startsWith("https://"),
-  accessKey,
-  secretKey,
-});
-
-export async function listObjects(prefix: string) {
-  return new Promise<any[]>((resolve, reject) => {
-    const results: any[] = [];
-    const stream = client.listObjectsV2(bucket, prefix, true);
-    stream.on("data", (obj) => results.push(obj));
-    stream.on("end", () => resolve(results));
-    stream.on("error", reject);
-  });
-}
+const MINIO_URL = process.env.NEXT_PUBLIC_MINIO_URL || "https://minio-production-e654.up.railway.app";
+const BUCKET = process.env.NEXT_PUBLIC_MINIO_BUCKET || "team-assets";
 
 export function getObjectUrl(objectName: string) {
-  const base = endpoint.startsWith("http") ? endpoint : `https://${endpoint}`;
-  return `${base}/${bucket}/${objectName}`;
+  return `${MINIO_URL}/${BUCKET}/${objectName}`;
 }
 
-export async function getObjectText(objectName: string) {
-  const obj = await client.getObject(bucket, objectName);
-  return new Promise<string>((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    obj.on("data", (chunk) => chunks.push(chunk));
-    obj.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
-    obj.on("error", reject);
-  });
-}
+// 预定义的文件列表（因为 MinIO 列表 API 需要认证）
+// 后续可以通过 API 路由动态获取
+export const ASSETS = {
+  docs: [
+    { name: "PRD-情感机器人围棋模块.md", path: "docs/PRD-情感机器人围棋模块.md" },
+    { name: "DD-硬件架构问答.md", path: "docs/DD-硬件架构问答.md" },
+    { name: "DD-软硬件协同问答.md", path: "docs/DD-软硬件协同问答.md" },
+    { name: "DD-竞品硬件对比.md", path: "docs/DD-竞品硬件对比.md" },
+    { name: "DD-投资人问答汇总.md", path: "docs/DD-投资人问答汇总.md" },
+    { name: "BOM-硬件物料清单.md", path: "docs/BOM-硬件物料清单.md" },
+    { name: "REVIEW-投资人尽调文档.md", path: "docs/REVIEW-投资人尽调文档.md" },
+  ],
+  designs: {
+    concept: [
+      { name: "robot-concept-v1.png", path: "designs/concept/robot-concept-v1.png" },
+    ],
+    cmf: [],
+    renders: [],
+  },
+  cad: [
+    { name: "arm-mount-v1.step", path: "cad/arm-mount-v1.step" },
+  ],
+};
