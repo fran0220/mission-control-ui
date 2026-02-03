@@ -1,6 +1,15 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+const statusValidator = v.union(
+  v.literal("inbox"),
+  v.literal("assigned"),
+  v.literal("in_progress"),
+  v.literal("review"),
+  v.literal("blocked"),
+  v.literal("done")
+);
+
 // 获取所有任务
 export const list = query({
   args: {},
@@ -12,14 +21,7 @@ export const list = query({
 // 根据状态获取任务
 export const getByStatus = query({
   args: {
-    status: v.union(
-      v.literal("inbox"),
-      v.literal("assigned"),
-      v.literal("in_progress"),
-      v.literal("review"),
-      v.literal("blocked"),
-      v.literal("done")
-    ),
+    status: statusValidator,
   },
   handler: async (ctx, args) => {
     return await ctx.db
@@ -73,6 +75,9 @@ export const create = mutation({
       status: args.assigneeIds && args.assigneeIds.length > 0 ? "assigned" : "inbox",
       assigneeIds: args.assigneeIds || [],
       createdBy: args.createdBy,
+      reviewerId: undefined,
+      reviewComment: undefined,
+      reviewedAt: undefined,
       dueDate: args.dueDate,
       createdAt: now,
       updatedAt: now,
@@ -138,14 +143,7 @@ export const assign = mutation({
 export const updateStatus = mutation({
   args: {
     taskId: v.id("tasks"),
-    status: v.union(
-      v.literal("inbox"),
-      v.literal("assigned"),
-      v.literal("in_progress"),
-      v.literal("review"),
-      v.literal("blocked"),
-      v.literal("done")
-    ),
+    status: statusValidator,
     updatedBy: v.id("agents"),
   },
   handler: async (ctx, args) => {
@@ -154,10 +152,21 @@ export const updateStatus = mutation({
     if (!task) throw new Error("Task not found");
 
     const oldStatus = task.status;
-    await ctx.db.patch(args.taskId, {
-      status: args.status,
-      updatedAt: now,
-    });
+    const updates: {
+      status: typeof args.status;
+      updatedAt: number;
+      reviewerId?: undefined;
+      reviewComment?: undefined;
+      reviewedAt?: undefined;
+    } = { status: args.status, updatedAt: now };
+
+    if (args.status === "in_progress") {
+      updates.reviewerId = undefined;
+      updates.reviewComment = undefined;
+      updates.reviewedAt = undefined;
+    }
+
+    await ctx.db.patch(args.taskId, updates);
 
     // 记录活动
     await ctx.db.insert("activities", {
@@ -197,5 +206,113 @@ export const update = mutation({
       ...filteredUpdates,
       updatedAt: Date.now(),
     });
+  },
+});
+
+const reviewCommentValidator = v.optional(v.string());
+
+export const submitForReview = mutation({
+  args: {
+    taskId: v.id("tasks"),
+    updatedBy: v.id("agents"),
+    reviewComment: reviewCommentValidator,
+    reviewerId: v.optional(v.id("agents")),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const task = await ctx.db.get(args.taskId);
+    if (!task) throw new Error("Task not found");
+
+    await ctx.db.patch(args.taskId, {
+      status: "review",
+      reviewComment: args.reviewComment,
+      reviewedAt: undefined,
+      reviewerId: args.reviewerId ?? undefined,
+      updatedAt: now,
+    });
+
+    await ctx.db.insert("activities", {
+      type: "status_changed",
+      agentId: args.updatedBy,
+      taskId: args.taskId,
+      message: "提交任务审查",
+      metadata: { newStatus: "review" },
+      createdAt: now,
+    });
+  },
+});
+
+export const approveReview = mutation({
+  args: {
+    taskId: v.id("tasks"),
+    reviewerId: v.id("agents"),
+    reviewComment: reviewCommentValidator,
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const task = await ctx.db.get(args.taskId);
+    if (!task) throw new Error("Task not found");
+
+    await ctx.db.patch(args.taskId, {
+      status: "done",
+      reviewerId: args.reviewerId,
+      reviewComment: args.reviewComment ?? task.reviewComment,
+      reviewedAt: now,
+      updatedAt: now,
+    });
+
+    await ctx.db.insert("activities", {
+      type: "status_changed",
+      agentId: args.reviewerId,
+      taskId: args.taskId,
+      message: "审查通过",
+      metadata: { newStatus: "done" },
+      createdAt: now,
+    });
+  },
+});
+
+export const rejectReview = mutation({
+  args: {
+    taskId: v.id("tasks"),
+    reviewerId: v.id("agents"),
+    reviewComment: reviewCommentValidator,
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const task = await ctx.db.get(args.taskId);
+    if (!task) throw new Error("Task not found");
+
+    const assigneeId = task.assigneeIds[0] ?? task.createdBy;
+
+    await ctx.db.patch(args.taskId, {
+      status: "in_progress",
+      reviewerId: args.reviewerId,
+      reviewComment: args.reviewComment,
+      reviewedAt: now,
+      updatedAt: now,
+    });
+
+    await ctx.db.insert("activities", {
+      type: "status_changed",
+      agentId: args.reviewerId,
+      taskId: args.taskId,
+      message: "审查未通过",
+      metadata: { newStatus: "in_progress" },
+      createdAt: now,
+    });
+
+    if (assigneeId) {
+      const agent = await ctx.db.get(assigneeId);
+      const mention = agent?.mentionPatterns?.[0] || `@${agent?.name || "agent"}`;
+      await ctx.db.insert("notifications", {
+        mentionedAgentId: assigneeId,
+        fromAgentId: args.reviewerId,
+        taskId: args.taskId,
+        content: `${mention} 审查未通过: ${args.reviewComment || "需要调整"}`,
+        delivered: false,
+        createdAt: now,
+      });
+    }
   },
 });

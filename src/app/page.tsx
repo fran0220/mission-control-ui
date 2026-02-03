@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -54,6 +54,11 @@ export default function MissionControl() {
   const agents = useQuery(api.agents.list);
   const tasks = useQuery(api.tasks.list);
   const activities = useQuery(api.activities.getRecent, { limit: 30 });
+  const approveReview = useMutation(api.tasks.approveReview);
+  const rejectReview = useMutation(api.tasks.rejectReview);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState<any>(null);
+  const [reviewComment, setReviewComment] = useState("");
 
   // Responsive detection
   useEffect(() => {
@@ -76,6 +81,30 @@ export default function MissionControl() {
   const now = new Date();
   const timeStr = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const dateStr = now.toLocaleDateString("zh-CN", { weekday: "short", month: "short", day: "numeric" });
+
+  const handleReview = async (approved: boolean) => {
+    if (!reviewTarget) return;
+    const reviewerId = agents?.find((a: any) => a.name === "Xiaomao")?._id || agents?.[0]?._id;
+    if (!reviewerId) return;
+
+    if (approved) {
+      await approveReview({
+        taskId: reviewTarget._id,
+        reviewerId,
+        reviewComment: reviewComment || undefined,
+      });
+    } else {
+      await rejectReview({
+        taskId: reviewTarget._id,
+        reviewerId,
+        reviewComment: reviewComment || undefined,
+      });
+    }
+
+    setReviewModalOpen(false);
+    setReviewTarget(null);
+    setReviewComment("");
+  };
 
   return (
     <div className="min-h-screen bg-stone-50 font-sans">
@@ -262,7 +291,15 @@ export default function MissionControl() {
                     {/* Tasks */}
                     <div className="flex-1 space-y-2 overflow-y-auto pb-4 pr-1">
                       {columnTasks.map((task: any) => (
-                        <TaskCard key={task._id} task={task} agents={agents} />
+                        <TaskCard
+                          key={task._id}
+                          task={task}
+                          agents={agents}
+                          onReview={(t) => {
+                            setReviewTarget(t);
+                            setReviewModalOpen(true);
+                          }}
+                        />
                       ))}
                     </div>
                   </div>
@@ -359,15 +396,84 @@ export default function MissionControl() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Review Modal */}
+      <AnimatePresence>
+        {reviewModalOpen && reviewTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              transition={{ type: "spring", damping: 20, stiffness: 260 }}
+              className="w-[92%] max-w-lg rounded-2xl bg-white border border-stone-200 shadow-xl"
+            >
+              <div className="px-5 py-4 border-b border-stone-100">
+                <h3 className="text-sm font-semibold text-stone-700">任务审查</h3>
+                <p className="text-xs text-stone-400 mt-1">{reviewTarget.title}</p>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <label className="text-xs font-medium text-stone-500">审查评论</label>
+                <textarea
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-600 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                  placeholder="补充审查意见（可选）"
+                />
+              </div>
+              <div className="px-5 py-4 border-t border-stone-100 flex items-center justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setReviewModalOpen(false);
+                    setReviewTarget(null);
+                    setReviewComment("");
+                  }}
+                  className="px-3 py-2 rounded-lg text-xs font-medium text-stone-500 hover:bg-stone-100"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => handleReview(false)}
+                  className="px-3 py-2 rounded-lg text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100"
+                >
+                  不通过
+                </button>
+                <button
+                  onClick={() => handleReview(true)}
+                  className="px-3 py-2 rounded-lg text-xs font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                >
+                  通过
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 // Task Card Component
-function TaskCard({ task, agents }: { task: any; agents: any }) {
+function TaskCard({
+  task,
+  agents,
+  onReview,
+}: {
+  task: any;
+  agents: any;
+  onReview: (task: any) => void;
+}) {
   const priorityStyle = priorityStyles[task.priority as Priority] || priorityStyles.P2;
   const assignees = agents?.filter((a: any) => task.assigneeIds?.includes(a._id)) || [];
   const creator = agents?.find((a: any) => a._id === task.createdBy);
+  const reviewer = agents?.find((a: any) => a._id === task.reviewerId);
+  const hasReviewComment = Boolean(task.reviewComment);
 
   return (
     <div className="bg-white rounded-xl border border-stone-200 p-3 hover:shadow-md hover:border-stone-300 transition-all cursor-pointer group">
@@ -391,6 +497,21 @@ function TaskCard({ task, agents }: { task: any; agents: any }) {
         </p>
       )}
 
+      {/* Status Meta */}
+      {(task.status === "review" || hasReviewComment || reviewer) && (
+        <div className="mb-2.5 space-y-1">
+          {task.status === "review" && (
+            <div className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide">待审查</div>
+          )}
+          {reviewer && (
+            <div className="text-[10px] text-stone-400">审查人: {reviewer.name}</div>
+          )}
+          {hasReviewComment && (
+            <div className="text-[10px] text-stone-500 line-clamp-2">评语: {task.reviewComment}</div>
+          )}
+        </div>
+      )}
+
       {/* Footer */}
       <div className="flex items-center justify-between pt-2 border-t border-stone-100">
         <div className="flex items-center gap-1.5">
@@ -408,10 +529,23 @@ function TaskCard({ task, agents }: { task: any; agents: any }) {
             <span className="text-[10px] text-stone-400 ml-0.5">{assignees[0]?.name}</span>
           )}
         </div>
-        <span className="text-[10px] text-stone-300 flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          {formatDistanceToNow(task.createdAt, { addSuffix: false, locale: zhCN })}
-        </span>
+        <div className="flex items-center gap-2">
+          {task.status === "review" && (
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                onReview(task);
+              }}
+              className="text-[10px] font-semibold px-2 py-1 rounded-full bg-violet-50 text-violet-600 hover:bg-violet-100"
+            >
+              审查
+            </button>
+          )}
+          <span className="text-[10px] text-stone-300 flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            {formatDistanceToNow(task.createdAt, { addSuffix: false, locale: zhCN })}
+          </span>
+        </div>
       </div>
     </div>
   );
