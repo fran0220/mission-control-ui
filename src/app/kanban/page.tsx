@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { AnimatePresence, motion } from "framer-motion";
@@ -14,31 +14,45 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import {
-  Background,
-  BackgroundVariant,
-  Controls,
-  MiniMap,
-  Node,
-  NodeMouseHandler,
-  ReactFlow,
-  ReactFlowProvider,
-  useNodesState,
-  useReactFlow,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 
-type TaskStatus = "inbox" | "assigned" | "in_progress" | "review" | "blocked" | "done";
+type FlowStatus = "inbox" | "assigned" | "in_progress" | "review" | "done";
+type TaskStatus = FlowStatus | "blocked";
 
-type ZoneNodeData = {
-  label: string;
-  tone: string;
-};
+const flowStatuses: FlowStatus[] = ["inbox", "assigned", "in_progress", "review", "done"];
 
-type ZoneNodeProps = {
-  data: ZoneNodeData;
+const statusMeta: Record<FlowStatus, { label: string; description: string; tone: string; accent: string }> = {
+  inbox: {
+    label: "收件箱",
+    description: "等待分配",
+    tone: "border-slate-200 bg-slate-50/70",
+    accent: "text-slate-500",
+  },
+  assigned: {
+    label: "已分配",
+    description: "已指派负责人",
+    tone: "border-sky-200 bg-sky-50/70",
+    accent: "text-sky-500",
+  },
+  in_progress: {
+    label: "进行中",
+    description: "正在推进",
+    tone: "border-amber-200 bg-amber-50/70",
+    accent: "text-amber-600",
+  },
+  review: {
+    label: "待审查",
+    description: "等待审核",
+    tone: "border-violet-200 bg-violet-50/70",
+    accent: "text-violet-500",
+  },
+  done: {
+    label: "已完成",
+    description: "交付完成",
+    tone: "border-emerald-200 bg-emerald-50/70",
+    accent: "text-emerald-600",
+  },
 };
 
 const priorityStyles: Record<string, string> = {
@@ -61,52 +75,7 @@ const roleAbbr: Record<string, { abbr: string; color: string }> = {
   结构工程: { abbr: "MD", color: "bg-orange-100 text-orange-600" },
 };
 
-const statusZones = [
-  {
-    key: "inbox",
-    label: "收件箱",
-    x: -520,
-    y: -200,
-    tone: "border-slate-200 bg-slate-50/70 text-slate-500",
-  },
-  {
-    key: "assigned",
-    label: "已分配",
-    x: -80,
-    y: -200,
-    tone: "border-sky-200 bg-sky-50/70 text-sky-500",
-  },
-  {
-    key: "in_progress",
-    label: "进行中",
-    x: 360,
-    y: -200,
-    tone: "border-amber-200 bg-amber-50/70 text-amber-600",
-  },
-  {
-    key: "review",
-    label: "待审查",
-    x: 800,
-    y: -200,
-    tone: "border-violet-200 bg-violet-50/70 text-violet-500",
-  },
-  {
-    key: "done",
-    label: "已完成",
-    x: 1240,
-    y: -200,
-    tone: "border-emerald-200 bg-emerald-50/70 text-emerald-500",
-  },
-];
-
-const statusBounds: Record<TaskStatus, { minX: number; maxX: number }> = {
-  inbox: { minX: -640, maxX: -200 },
-  assigned: { minX: -200, maxX: 240 },
-  in_progress: { minX: 240, maxX: 680 },
-  review: { minX: 680, maxX: 1120 },
-  done: { minX: 1120, maxX: 1560 },
-  blocked: { minX: -640, maxX: 1560 },
-};
+const priorityRank: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
 
 const formatDurationShort = (ms: number) => {
   const minutes = Math.max(1, Math.floor(ms / 60000));
@@ -132,15 +101,15 @@ const getDueInfo = (dueDate?: number) => {
   };
 };
 
-const getDisplayStatus = (task: any): TaskStatus => {
+const getDisplayStatus = (task: any): FlowStatus => {
   const normalizedOriginal = task.originalStatus === "blocked" ? "in_progress" : task.originalStatus;
   if (task.isBlocked) {
-    return (normalizedOriginal ?? task.status) as TaskStatus;
+    return (normalizedOriginal ?? task.status) as FlowStatus;
   }
   if (task.status === "blocked") {
-    return (normalizedOriginal ?? "in_progress") as TaskStatus;
+    return (normalizedOriginal ?? "in_progress") as FlowStatus;
   }
-  return task.status as TaskStatus;
+  return task.status as FlowStatus;
 };
 
 const getShortTaskId = (task: any) => {
@@ -148,43 +117,170 @@ const getShortTaskId = (task: any) => {
   return `#${raw}`;
 };
 
-const taskNodeDefaults: Record<TaskStatus, { x: number; y: number }> = {
-  inbox: { x: -520, y: 40 },
-  assigned: { x: -80, y: 40 },
-  in_progress: { x: 360, y: 40 },
-  review: { x: 800, y: 40 },
-  done: { x: 1240, y: 40 },
-  blocked: { x: 360, y: 320 },
+const getNextStatus = (status: FlowStatus) => {
+  const idx = flowStatuses.indexOf(status);
+  return idx >= 0 && idx < flowStatuses.length - 1 ? flowStatuses[idx + 1] : null;
 };
 
-const createDefaultPosition = (status: TaskStatus, index: number) => {
-  const base = taskNodeDefaults[status] || taskNodeDefaults.in_progress;
-  return {
-    x: base.x + (index % 3) * 220,
-    y: base.y + Math.floor(index / 3) * 180,
-  };
+const getPrevStatus = (status: FlowStatus) => {
+  const idx = flowStatuses.indexOf(status);
+  return idx > 0 ? flowStatuses[idx - 1] : null;
 };
 
-const getStatusFromPosition = (x: number): TaskStatus | null => {
-  const entries = Object.entries(statusBounds) as Array<[TaskStatus, { minX: number; maxX: number }]>;
-  for (const [status, range] of entries) {
-    if (x >= range.minX && x < range.maxX) return status;
-  }
-  return null;
+const TaskCard = ({
+  task,
+  agents,
+  onOpen,
+  onPrev,
+  onNext,
+  onToggleBlocked,
+  prevStatus,
+  nextStatus,
+}: {
+  task: any;
+  agents: any[] | undefined;
+  onOpen: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+  onToggleBlocked: () => void;
+  prevStatus: FlowStatus | null;
+  nextStatus: FlowStatus | null;
+}) => {
+  const priorityStyle = priorityStyles[task.priority] || priorityStyles.P2;
+  const assignees = agents?.filter((a: any) => task.assigneeIds?.includes(a._id)) || [];
+  const creator = agents?.find((a: any) => a._id === task.createdBy);
+  const reviewer = agents?.find((a: any) => a._id === task.reviewerId);
+  const hasReviewComment = Boolean(task.reviewComment);
+  const isBlocked = Boolean(task.isBlocked || task.status === "blocked");
+  const statusSince = task.stateChangedAt ?? task.updatedAt ?? task.createdAt;
+  const statusAgeMs = Date.now() - statusSince;
+  const statusAgeLabel = `已停留 ${formatDurationShort(statusAgeMs)}`;
+  const statusAgeClass = statusAgeMs > 24 * 60 * 60 * 1000 ? "text-rose-500" : "text-stone-300";
+  const dueInfo = getDueInfo(task.dueDate);
+  const displayAssignee = assignees[0] || creator;
+
+  return (
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.2 }}
+      onClick={onOpen}
+      className={`rounded-2xl border p-3 bg-white shadow-sm cursor-pointer transition-shadow hover:shadow-md ${
+        isBlocked ? "border-rose-300 bg-rose-50/40" : "border-stone-200"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${priorityStyle}`}>
+          {task.priority}
+        </span>
+        <div className="flex items-center gap-1">
+          {isBlocked && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-500 font-semibold">
+              BLOCKED
+            </span>
+          )}
+          <span className="text-[10px] text-stone-400 font-mono">{getShortTaskId(task)}</span>
+        </div>
+      </div>
+      <h4 className="font-semibold text-[13px] text-stone-800 mb-1 line-clamp-2 leading-snug">
+        {task.title}
+      </h4>
+      {task.description && (
+        <p className="text-[11px] text-stone-400 mb-2.5 line-clamp-2 leading-relaxed">
+          {task.description}
+        </p>
+      )}
+      {(task.status === "review" || isBlocked || hasReviewComment || reviewer) && (
+        <div className="mb-2.5 space-y-1">
+          {task.status === "review" && (
+            <div className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide">⏳ 待审查</div>
+          )}
+          {isBlocked && <div className="text-[10px] font-semibold text-rose-500 uppercase tracking-wide">🚫 阻塞中</div>}
+          {reviewer && <div className="text-[10px] text-stone-400">审查人: {reviewer.name}</div>}
+          {hasReviewComment && <div className="text-[10px] text-stone-500 line-clamp-2">评语: {task.reviewComment}</div>}
+        </div>
+      )}
+      <div className="flex items-center justify-between pt-2 border-t border-stone-100">
+        <div className="flex items-center gap-1.5">
+          {(assignees.length > 0 ? assignees : creator ? [creator] : []).slice(0, 2).map((a: any, i: number) => (
+            <div
+              key={a._id}
+              className="w-5 h-5 rounded-full bg-stone-200 flex items-center justify-center text-[9px] font-bold text-stone-500"
+              style={{ marginLeft: i > 0 ? -6 : 0 }}
+              title={a.name}
+            >
+              {a.name[0]}
+            </div>
+          ))}
+          {displayAssignee && <span className="text-[10px] text-stone-400 ml-0.5">👤 {displayAssignee.name}</span>}
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`text-[10px] ${statusAgeClass} flex items-center gap-1`}>
+            <Clock className="w-3 h-3" />
+            {statusAgeLabel}
+          </span>
+          {dueInfo && <span className={`text-[10px] ${dueInfo.className}`}>{dueInfo.label}</span>}
+        </div>
+      </div>
+      <div className="mt-3 flex items-center gap-2 text-[10px]">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onPrev();
+          }}
+          disabled={!prevStatus}
+          className={`px-2 py-1 rounded-full border transition-colors ${
+            prevStatus
+              ? "border-stone-200 text-stone-600 hover:bg-stone-100"
+              : "border-stone-100 text-stone-300 cursor-not-allowed"
+          }`}
+        >
+          ← 退回
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onNext();
+          }}
+          disabled={!nextStatus}
+          className={`px-2 py-1 rounded-full border transition-colors ${
+            nextStatus
+              ? "border-stone-200 text-stone-600 hover:bg-stone-100"
+              : "border-stone-100 text-stone-300 cursor-not-allowed"
+          }`}
+        >
+          → 下一状态
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleBlocked();
+          }}
+          className={`ml-auto px-2 py-1 rounded-full border transition-colors ${
+            isBlocked
+              ? "border-rose-200 text-rose-500 bg-rose-50 hover:bg-rose-100"
+              : "border-stone-200 text-stone-500 hover:bg-stone-100"
+          }`}
+        >
+          {isBlocked ? "✅ 解除" : "🚫 阻塞"}
+        </button>
+      </div>
+    </motion.article>
+  );
 };
 
-const CanvasBoard = () => {
+const KanbanBoard = () => {
   const tasks = useQuery(api.tasks.list);
   const agents = useQuery(api.agents.list);
   const activities = useQuery(api.activities.getRecent, { limit: 30 });
-  const updateTask = useMutation(api.tasks.update);
   const updateStatus = useMutation(api.tasks.updateStatus);
   const quickCreate = useMutation(api.tasks.quickCreate);
 
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [viewportReady, setViewportReady] = useState(false);
   const [feedCollapsed, setFeedCollapsed] = useState(false);
   const [activityStatusFilter, setActivityStatusFilter] = useState<"all" | "blocked" | "review">("all");
   const [activityAgentFilter, setActivityAgentFilter] = useState<string>("all");
@@ -193,9 +289,6 @@ const CanvasBoard = () => {
   const [quickCreatePriority, setQuickCreatePriority] = useState("P2");
   const [quickCreateAssigneeId, setQuickCreateAssigneeId] = useState("");
   const [detailTask, setDetailTask] = useState<any | null>(null);
-  const [nodes, setNodes, onNodesChange] = useNodesState([] as Node[]);
-  const saveTimerRef = useRef<Record<string, NodeJS.Timeout>>({});
-  const { fitView } = useReactFlow();
 
   useEffect(() => {
     const checkMobile = () => {
@@ -213,6 +306,7 @@ const CanvasBoard = () => {
 
   const activeAgents = agents?.filter((a) => a.status === "active").length || 0;
   const totalTasks = tasks?.length || 0;
+  const blockedCount = tasks?.filter((task: any) => task.isBlocked || task.status === "blocked").length || 0;
   const operatorId = useMemo(
     () => agents?.find((a: any) => a.name === "Xiaomao")?._id || agents?.[0]?._id,
     [agents]
@@ -238,104 +332,30 @@ const CanvasBoard = () => {
     });
   }, [activities, activityAgentFilter, activityStatusFilter, taskMap]);
 
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  const dateStr = now.toLocaleDateString("zh-CN", { weekday: "short", month: "short", day: "numeric" });
-
-  const syncNodesWithTasks = useCallback(() => {
-    if (!tasks) return;
-    const groupedByStatus: Record<TaskStatus, any[]> = {
+  const tasksByStatus = useMemo(() => {
+    const grouped: Record<FlowStatus, any[]> = {
       inbox: [],
       assigned: [],
       in_progress: [],
       review: [],
       done: [],
-      blocked: [],
     };
 
-    tasks.forEach((task: any) => {
+    (tasks || []).forEach((task: any) => {
       const status = getDisplayStatus(task);
-      groupedByStatus[status]?.push(task);
+      grouped[status]?.push(task);
     });
 
-    const taskNodes: Node[] = tasks.map((task: any, index: number) => {
-      const status = getDisplayStatus(task);
-      const statusGroup = groupedByStatus[status] || [];
-      const groupIndex = statusGroup.findIndex((t) => t._id === task._id);
-      const position = task.canvasPosition || createDefaultPosition(status, groupIndex === -1 ? index : groupIndex);
-      return {
-        id: task._id,
-        type: "task",
-        data: { task, agents },
-        position,
-      } as Node;
-    });
-
-    const zoneNodes: Node<ZoneNodeData>[] = statusZones.map((zone) => ({
-      id: `zone:${zone.key}`,
-      type: "zone",
-      data: { label: zone.label, tone: zone.tone },
-      position: { x: zone.x, y: zone.y },
-      draggable: false,
-      selectable: false,
-    }));
-
-    const nextNodes: Node[] = [...zoneNodes, ...taskNodes];
-
-    setNodes((prev) => {
-      if (prev.length === nextNodes.length && prev.every((node) => {
-        const next = nextNodes.find((n) => n.id === node.id);
-        return next && node.position.x === next.position.x && node.position.y === next.position.y;
-      })) {
-        return prev.map((node) => ({
-          ...node,
-          data: node.type === "task" ? { ...node.data, agents } : node.data,
-        }));
-      }
-      return nextNodes;
-    });
-  }, [tasks, agents, setNodes]);
-
-  useEffect(() => {
-    syncNodesWithTasks();
-  }, [syncNodesWithTasks]);
-
-  useEffect(() => {
-    if (nodes.length > 0 && !viewportReady) {
-      fitView({ padding: 0.2, duration: 400 });
-      setViewportReady(true);
-    }
-  }, [nodes.length, fitView, viewportReady]);
-
-  const handleNodeDragStop: NodeMouseHandler = async (_event, node) => {
-    if (node.type === "zone") return;
-    const task = tasks?.find((t: any) => t._id === node.id);
-    if (!task || !operatorId) return;
-
-    const nextStatus = getStatusFromPosition(node.position.x) || getDisplayStatus(task);
-
-    if (saveTimerRef.current[node.id]) {
-      clearTimeout(saveTimerRef.current[node.id]);
-    }
-
-    saveTimerRef.current[node.id] = setTimeout(async () => {
-      await updateTask({
-        taskId: task._id,
-        canvasPosition: {
-          x: node.position.x,
-          y: node.position.y,
-        },
+    flowStatuses.forEach((status) => {
+      grouped[status].sort((a, b) => {
+        const priorityDiff = (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9);
+        if (priorityDiff !== 0) return priorityDiff;
+        return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
       });
+    });
 
-      if (nextStatus && nextStatus !== getDisplayStatus(task)) {
-        await updateStatus({
-          taskId: task._id,
-          status: nextStatus,
-          updatedBy: operatorId,
-        });
-      }
-    }, 300);
-  };
+    return grouped;
+  }, [tasks]);
 
   const handleQuickCreate = async () => {
     if (!quickCreateTitle.trim() || !operatorId) return;
@@ -351,16 +371,27 @@ const CanvasBoard = () => {
     setQuickCreateAssigneeId("");
   };
 
-  const handleNodeDoubleClick: NodeMouseHandler = (_event, node) => {
-    if (node.type === "zone") return;
-    const task = tasks?.find((t: any) => t._id === node.id);
-    if (!task) return;
-    setDetailTask(task);
+  const handleMoveStatus = async (task: any, status: TaskStatus) => {
+    if (!operatorId) return;
+    await updateStatus({ taskId: task._id, status: status as any, updatedBy: operatorId });
   };
+
+  const handleToggleBlocked = async (task: any) => {
+    if (!operatorId) return;
+    if (task.isBlocked || task.status === "blocked") {
+      const targetStatus = getDisplayStatus(task);
+      await handleMoveStatus(task, targetStatus);
+    } else {
+      await handleMoveStatus(task, "blocked");
+    }
+  };
+
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const dateStr = now.toLocaleDateString("zh-CN", { weekday: "short", month: "short", day: "numeric" });
 
   return (
     <div className="min-h-screen bg-stone-50 font-sans">
-      {/* Header */}
       <header className="h-16 bg-white/80 backdrop-blur-md border-b border-stone-200 sticky top-0 z-50">
         <div className="h-full px-4 lg:px-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -378,8 +409,8 @@ const CanvasBoard = () => {
                 <Zap className="w-4 h-4 text-white" />
               </div>
               <div className="hidden sm:block">
-                <h1 className="text-sm font-bold text-stone-800 tracking-tight">MISSION CANVAS</h1>
-                <p className="text-[10px] text-stone-400 -mt-0.5">Freeform Task Board</p>
+                <h1 className="text-sm font-bold text-stone-800 tracking-tight">MISSION KANBAN</h1>
+                <p className="text-[10px] text-stone-400 -mt-0.5">Status Flow Board</p>
               </div>
             </div>
           </div>
@@ -393,6 +424,11 @@ const CanvasBoard = () => {
             <div className="text-center">
               <div className="text-2xl lg:text-3xl font-bold text-stone-800 tabular-nums">{totalTasks}</div>
               <div className="text-[10px] text-stone-400 uppercase tracking-wider">Tasks</div>
+            </div>
+            <div className="w-px h-8 bg-stone-200 hidden sm:block" />
+            <div className="text-center hidden sm:block">
+              <div className="text-2xl lg:text-3xl font-bold text-rose-500 tabular-nums">{blockedCount}</div>
+              <div className="text-[10px] text-stone-400 uppercase tracking-wider">Blocked</div>
             </div>
           </div>
 
@@ -485,8 +521,9 @@ const CanvasBoard = () => {
           <div className="h-12 px-4 flex items-center gap-2 bg-white border-b border-stone-200">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-amber-400" />
-              <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Mission Canvas</span>
+              <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Mission Kanban</span>
             </div>
+            <span className="text-[10px] text-stone-400">状态流转看板</span>
             <button
               onClick={() => setQuickCreateOpen(true)}
               className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-stone-100 text-stone-600 hover:bg-stone-200 transition-colors"
@@ -496,33 +533,59 @@ const CanvasBoard = () => {
             </button>
           </div>
 
-          <div className="flex-1">
-            <ReactFlow
-              nodes={nodes}
-              onNodesChange={onNodesChange}
-              nodeTypes={{ task: TaskNode, zone: ZoneNode }}
-              fitView
-              minZoom={0.2}
-              maxZoom={2.2}
-              onNodeDragStop={handleNodeDragStop}
-              onNodeDoubleClick={handleNodeDoubleClick}
-              panOnDrag
-              zoomOnScroll
-              className="bg-stone-50"
-            >
-              <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#E7E5E4" />
-              <MiniMap
-                nodeColor={(node) => {
-                  if (node.type === "task") return "#FDBA74";
-                  if (node.type === "zone") return "#E7E5E4";
-                  return "#D6D3D1";
-                }}
-                maskColor="rgba(255,255,255,0.6)"
-                zoomable
-                pannable
-              />
-              <Controls position="bottom-right" showZoom showFitView />
-            </ReactFlow>
+          <div className="flex-1 overflow-hidden">
+            <div className="h-full overflow-x-auto">
+              <div className="flex h-full gap-4 px-4 py-4 min-w-max">
+                {flowStatuses.map((status) => {
+                  const meta = statusMeta[status];
+                  const list = tasksByStatus[status] || [];
+                  return (
+                    <motion.section
+                      layout
+                      key={status}
+                      className={`w-[320px] flex flex-col rounded-2xl border ${meta.tone} bg-white/80 shadow-sm`}
+                    >
+                      <div className="px-4 py-3 border-b border-stone-100">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className="text-sm font-semibold text-stone-700">{meta.label}</h3>
+                            <p className="text-[10px] text-stone-400 mt-0.5">{meta.description}</p>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${meta.tone} ${meta.accent}`}>
+                            {list.length}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+                        <AnimatePresence mode="popLayout">
+                          {list.map((task: any) => {
+                            const currentStatus = getDisplayStatus(task);
+                            const prevStatus = getPrevStatus(currentStatus);
+                            const nextStatus = getNextStatus(currentStatus);
+                            return (
+                              <TaskCard
+                                key={task._id}
+                                task={task}
+                                agents={agents}
+                                onOpen={() => setDetailTask(task)}
+                                onPrev={() => prevStatus && handleMoveStatus(task, prevStatus)}
+                                onNext={() => nextStatus && handleMoveStatus(task, nextStatus)}
+                                onToggleBlocked={() => handleToggleBlocked(task)}
+                                prevStatus={prevStatus}
+                                nextStatus={nextStatus}
+                              />
+                            );
+                          })}
+                        </AnimatePresence>
+                        {list.length === 0 && (
+                          <div className="text-center py-10 text-xs text-stone-300">暂无任务</div>
+                        )}
+                      </div>
+                    </motion.section>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </main>
 
@@ -749,86 +812,6 @@ const CanvasBoard = () => {
   );
 };
 
-const ZoneNode = ({ data }: ZoneNodeProps) => {
-  return (
-    <div className={`rounded-2xl border px-4 py-2 text-xs font-semibold ${data.tone}`}>
-      {data.label}
-    </div>
-  );
-};
-
-const TaskNode = ({ data }: { data: { task: any; agents: any } }) => {
-  const { task, agents } = data;
-  const priorityStyle = priorityStyles[task.priority] || priorityStyles.P2;
-  const assignees = agents?.filter((a: any) => task.assigneeIds?.includes(a._id)) || [];
-  const creator = agents?.find((a: any) => a._id === task.createdBy);
-  const reviewer = agents?.find((a: any) => a._id === task.reviewerId);
-  const hasReviewComment = Boolean(task.reviewComment);
-  const isBlocked = Boolean(task.isBlocked || task.status === "blocked");
-  const statusSince = task.stateChangedAt ?? task.updatedAt ?? task.createdAt;
-  const statusAgeMs = Date.now() - statusSince;
-  const statusAgeLabel = `已停留 ${formatDurationShort(statusAgeMs)}`;
-  const statusAgeClass = statusAgeMs > 24 * 60 * 60 * 1000 ? "text-rose-500" : "text-stone-300";
-  const dueInfo = getDueInfo(task.dueDate);
-
-  return (
-    <div
-      className={`rounded-2xl border p-3 transition-all bg-white shadow-sm min-w-[220px] ${
-        isBlocked ? "border-rose-400 bg-rose-50/40" : "border-stone-200"
-      }`}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${priorityStyle}`}>
-          {task.priority}
-        </span>
-        <span className="text-[10px] text-stone-400 font-mono">{getShortTaskId(task)}</span>
-      </div>
-      <h4 className="font-semibold text-[13px] text-stone-800 mb-1 line-clamp-2 leading-snug">
-        {task.title}
-      </h4>
-      {task.description && (
-        <p className="text-[11px] text-stone-400 mb-2.5 line-clamp-2 leading-relaxed">{task.description}</p>
-      )}
-      {(task.status === "review" || isBlocked || hasReviewComment || reviewer) && (
-        <div className="mb-2.5 space-y-1">
-          {task.status === "review" && (
-            <div className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide">⏳ 待审查</div>
-          )}
-          {isBlocked && <div className="text-[10px] font-semibold text-rose-500 uppercase tracking-wide">🚫 阻塞中</div>}
-          {reviewer && <div className="text-[10px] text-stone-400">审查人: {reviewer.name}</div>}
-          {hasReviewComment && <div className="text-[10px] text-stone-500 line-clamp-2">评语: {task.reviewComment}</div>}
-        </div>
-      )}
-      <div className="flex items-center justify-between pt-2 border-t border-stone-100">
-        <div className="flex items-center gap-1.5">
-          {(assignees.length > 0 ? assignees : creator ? [creator] : []).slice(0, 2).map((a: any, i: number) => (
-            <div
-              key={a._id}
-              className="w-5 h-5 rounded-full bg-stone-200 flex items-center justify-center text-[9px] font-bold text-stone-500"
-              style={{ marginLeft: i > 0 ? -6 : 0 }}
-              title={a.name}
-            >
-              {a.name[0]}
-            </div>
-          ))}
-          {assignees.length > 0 && <span className="text-[10px] text-stone-400 ml-0.5">{assignees[0]?.name}</span>}
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <span className={`text-[10px] ${statusAgeClass} flex items-center gap-1`}>
-            <Clock className="w-3 h-3" />
-            {statusAgeLabel}
-          </span>
-          {dueInfo && <span className={`text-[10px] ${dueInfo.className}`}>{dueInfo.label}</span>}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default function KanbanCanvasPage() {
-  return (
-    <ReactFlowProvider>
-      <CanvasBoard />
-    </ReactFlowProvider>
-  );
+export default function KanbanPage() {
+  return <KanbanBoard />;
 }
