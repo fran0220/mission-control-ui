@@ -43,6 +43,18 @@ export default defineSchema({
     reviewComment: v.optional(v.string()),
     reviewedAt: v.optional(v.number()),
     dueDate: v.optional(v.number()),
+    stateChangedAt: v.optional(v.number()),
+    isBlocked: v.optional(v.boolean()),
+    originalStatus: v.optional(
+      v.union(
+        v.literal("inbox"),
+        v.literal("assigned"),
+        v.literal("in_progress"),
+        v.literal("review"),
+        v.literal("blocked"),
+        v.literal("done")
+      )
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_status", ["status"])

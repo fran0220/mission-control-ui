@@ -68,17 +68,21 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    const initialStatus = args.assigneeIds && args.assigneeIds.length > 0 ? "assigned" : "inbox";
     const taskId = await ctx.db.insert("tasks", {
       title: args.title,
       description: args.description,
       priority: args.priority,
-      status: args.assigneeIds && args.assigneeIds.length > 0 ? "assigned" : "inbox",
+      status: initialStatus,
       assigneeIds: args.assigneeIds || [],
       createdBy: args.createdBy,
       reviewerId: undefined,
       reviewComment: undefined,
       reviewedAt: undefined,
       dueDate: args.dueDate,
+      stateChangedAt: now,
+      isBlocked: false,
+      originalStatus: undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -113,6 +117,9 @@ export const assign = mutation({
     await ctx.db.patch(args.taskId, {
       assigneeIds: args.assigneeIds,
       status: "assigned",
+      isBlocked: false,
+      originalStatus: undefined,
+      stateChangedAt: now,
       updatedAt: now,
     });
 
@@ -152,13 +159,27 @@ export const updateStatus = mutation({
     if (!task) throw new Error("Task not found");
 
     const oldStatus = task.status;
+    const nextStatus = args.status === "blocked" ? task.originalStatus ?? task.status : args.status;
     const updates: {
-      status: typeof args.status;
+      status?: typeof args.status;
       updatedAt: number;
       reviewerId?: undefined;
       reviewComment?: undefined;
       reviewedAt?: undefined;
-    } = { status: args.status, updatedAt: now };
+      isBlocked?: boolean;
+      originalStatus?: typeof args.status | undefined;
+      stateChangedAt?: number;
+    } = { updatedAt: now };
+
+    if (args.status === "blocked") {
+      updates.isBlocked = true;
+      updates.originalStatus = task.originalStatus ?? task.status;
+    } else {
+      updates.status = args.status;
+      updates.isBlocked = false;
+      updates.originalStatus = undefined;
+      updates.stateChangedAt = now;
+    }
 
     if (args.status === "in_progress") {
       updates.reviewerId = undefined;
@@ -173,8 +194,8 @@ export const updateStatus = mutation({
       type: "status_changed",
       agentId: args.updatedBy,
       taskId: args.taskId,
-      message: `任务状态: ${oldStatus} → ${args.status}`,
-      metadata: { oldStatus, newStatus: args.status },
+      message: `任务状态: ${oldStatus} → ${nextStatus}`,
+      metadata: { oldStatus, newStatus: nextStatus },
       createdAt: now,
     });
   },
@@ -202,9 +223,13 @@ export const update = mutation({
       Object.entries(updates).filter(([_, v]) => v !== undefined)
     );
     
+    const now = Date.now();
     await ctx.db.patch(taskId, {
       ...filteredUpdates,
-      updatedAt: Date.now(),
+      updatedAt: now,
+      ...(filteredUpdates.priority !== undefined || filteredUpdates.dueDate !== undefined
+        ? { stateChangedAt: now }
+        : {}),
     });
   },
 });
@@ -228,6 +253,9 @@ export const submitForReview = mutation({
       reviewComment: args.reviewComment,
       reviewedAt: undefined,
       reviewerId: args.reviewerId ?? undefined,
+      isBlocked: false,
+      originalStatus: undefined,
+      stateChangedAt: now,
       updatedAt: now,
     });
 
@@ -258,6 +286,9 @@ export const approveReview = mutation({
       reviewerId: args.reviewerId,
       reviewComment: args.reviewComment ?? task.reviewComment,
       reviewedAt: now,
+      isBlocked: false,
+      originalStatus: undefined,
+      stateChangedAt: now,
       updatedAt: now,
     });
 
@@ -290,6 +321,9 @@ export const rejectReview = mutation({
       reviewerId: args.reviewerId,
       reviewComment: args.reviewComment,
       reviewedAt: now,
+      isBlocked: false,
+      originalStatus: undefined,
+      stateChangedAt: now,
       updatedAt: now,
     });
 
@@ -314,5 +348,65 @@ export const rejectReview = mutation({
         createdAt: now,
       });
     }
+  },
+});
+
+export const quickCreate = mutation({
+  args: {
+    title: v.string(),
+    priority: v.union(
+      v.literal("P0"),
+      v.literal("P1"),
+      v.literal("P2"),
+      v.literal("P3")
+    ),
+    assigneeId: v.optional(v.id("agents")),
+    createdBy: v.optional(v.id("agents")),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const status = args.assigneeId ? "assigned" : "inbox";
+    const taskId = await ctx.db.insert("tasks", {
+      title: args.title,
+      description: "",
+      priority: args.priority,
+      status,
+      assigneeIds: args.assigneeId ? [args.assigneeId] : [],
+      createdBy: args.createdBy,
+      reviewerId: undefined,
+      reviewComment: undefined,
+      reviewedAt: undefined,
+      dueDate: undefined,
+      stateChangedAt: now,
+      isBlocked: false,
+      originalStatus: undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    if (args.createdBy) {
+      await ctx.db.insert("activities", {
+        type: "task_created",
+        agentId: args.createdBy,
+        taskId,
+        message: `快速创建任务: ${args.title}`,
+        createdAt: now,
+      });
+    }
+
+    if (args.assigneeId && args.createdBy) {
+      const agent = await ctx.db.get(args.assigneeId);
+      const mention = agent?.mentionPatterns?.[0] || `@${agent?.name || "agent"}`;
+      await ctx.db.insert("notifications", {
+        mentionedAgentId: args.assigneeId,
+        fromAgentId: args.createdBy,
+        taskId,
+        content: `${mention} 你收到新任务: ${args.title}`,
+        delivered: false,
+        createdAt: now,
+      });
+    }
+
+    return taskId;
   },
 });
