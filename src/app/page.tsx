@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useTasks, useAgents, useActivities, useUpdateStatus, useApproveReview, useRejectReview, useQuickCreate } from "@/hooks/useApi";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Clock,
@@ -124,13 +123,14 @@ export default function MissionControl() {
   const [quickCreateAssigneeId, setQuickCreateAssigneeId] = useState<string>("");
   const [activeTask, setActiveTask] = useState<any | null>(null);
 
-  const agents = useQuery(api.agents.list);
-  const tasks = useQuery(api.tasks.list);
-  const activities = useQuery(api.activities.getRecent, { limit: 30 });
-  const approveReview = useMutation(api.tasks.approveReview);
-  const rejectReview = useMutation(api.tasks.rejectReview);
-  const updateStatus = useMutation(api.tasks.updateStatus);
-  const quickCreate = useMutation(api.tasks.quickCreate);
+  // REST API hooks (replaces Convex hooks)
+  const agents = useAgents();
+  const tasks = useTasks();
+  const activities = useActivities(30);
+  const { mutate: approveReview } = useApproveReview();
+  const { mutate: rejectReview } = useRejectReview();
+  const { mutate: updateStatus } = useUpdateStatus();
+  const { mutate: quickCreate } = useQuickCreate();
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
