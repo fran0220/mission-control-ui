@@ -8,18 +8,25 @@ export function getObjectUrl(objectName: string) {
   return `${MINIO_URL}/${BUCKET}/${objectName}`;
 }
 
-// 预定义的文件列表（因为 MinIO 列表 API 需要认证）
-// 后续可以通过 API 路由动态获取
+// 分类文档结构
 export const ASSETS = {
-  docs: [
-    { name: "PRD-情感机器人围棋模块.md", path: "docs/PRD-情感机器人围棋模块.md" },
-    { name: "DD-硬件架构问答.md", path: "docs/DD-硬件架构问答.md" },
-    { name: "DD-软硬件协同问答.md", path: "docs/DD-软硬件协同问答.md" },
-    { name: "DD-竞品硬件对比.md", path: "docs/DD-竞品硬件对比.md" },
-    { name: "DD-投资人问答汇总.md", path: "docs/DD-投资人问答汇总.md" },
-    { name: "BOM-硬件物料清单.md", path: "docs/BOM-硬件物料清单.md" },
-    { name: "REVIEW-投资人尽调文档.md", path: "docs/REVIEW-投资人尽调文档.md" },
-  ],
+  docs: {
+    prd: [
+      { name: "PRD-情感机器人围棋模块", path: "docs/prd/PRD-情感机器人围棋模块.md" },
+    ],
+    dd: [
+      { name: "硬件架构问答", path: "docs/dd/DD-硬件架构问答.md" },
+      { name: "软硬件协同问答", path: "docs/dd/DD-软硬件协同问答.md" },
+      { name: "竞品硬件对比", path: "docs/dd/DD-竞品硬件对比.md" },
+      { name: "投资人问答汇总", path: "docs/dd/DD-投资人问答汇总.md" },
+    ],
+    bom: [
+      { name: "BOM-硬件物料清单", path: "docs/bom/BOM-硬件物料清单.md" },
+    ],
+    review: [
+      { name: "投资人尽调文档审查", path: "docs/review/REVIEW-投资人尽调文档.md" },
+    ],
+  },
   designs: {
     concept: [
       { name: "robot-concept-v1.png", path: "designs/concept/robot-concept-v1.png" },
@@ -28,6 +35,14 @@ export const ASSETS = {
     renders: [],
   },
   cad: [
-    { name: "arm-mount-v1.step", path: "cad/arm-mount-v1.step" },
+    { name: "arm-mount-v1.step", path: "cad/arm-mount-v1.step", format: "STEP" },
   ],
+};
+
+// 文档分类标签
+export const DOC_CATEGORIES = {
+  prd: { label: "📋 产品需求", color: "amber" },
+  dd: { label: "💼 投资人尽调", color: "blue" },
+  bom: { label: "📦 物料清单", color: "green" },
+  review: { label: "✅ 审查报告", color: "purple" },
 };
