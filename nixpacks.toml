@@ -1,11 +1,14 @@
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+nixPkgs = ["nodejs_20", "npm"]
 
 [phases.install]
 cmds = ["npm ci"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["npm run build", "cp -r public .next/standalone/", "cp -r .next/static .next/standalone/.next/"]
 
 [start]
-cmd = "npm run start"
+cmd = "node .next/standalone/server.js"
+
+[variables]
+NODE_ENV = "production"
