@@ -23,11 +23,12 @@ type TaskStatus = "inbox" | "assigned" | "in_progress" | "review" | "blocked" | 
 type Priority = "P0" | "P1" | "P2" | "P3";
 
 const statusColumns: { key: TaskStatus; label: string; dotColor: string }[] = [
-  { key: "inbox", label: "INBOX", dotColor: "bg-stone-400" },
-  { key: "assigned", label: "ASSIGNED", dotColor: "bg-sky-400" },
-  { key: "in_progress", label: "IN PROGRESS", dotColor: "bg-amber-400" },
-  { key: "review", label: "REVIEW", dotColor: "bg-violet-400" },
-  { key: "done", label: "DONE", dotColor: "bg-emerald-400" },
+  { key: "inbox", label: "收件箱", dotColor: "bg-stone-400" },
+  { key: "assigned", label: "已分配", dotColor: "bg-sky-400" },
+  { key: "in_progress", label: "进行中", dotColor: "bg-amber-400" },
+  { key: "blocked", label: "阻塞", dotColor: "bg-rose-400" },
+  { key: "review", label: "待审查", dotColor: "bg-violet-400" },
+  { key: "done", label: "已完成", dotColor: "bg-emerald-400" },
 ];
 
 const priorityStyles: Record<Priority, string> = {
@@ -42,8 +43,12 @@ const roleAbbr: Record<string, { abbr: string; color: string }> = {
   "调研分析": { abbr: "RES", color: "bg-sky-100 text-sky-600" },
   "产品经理": { abbr: "PM", color: "bg-violet-100 text-violet-600" },
   "硬件负责": { abbr: "HW", color: "bg-amber-100 text-amber-600" },
+  "硬件工程": { abbr: "HW", color: "bg-amber-100 text-amber-600" },
   "软件开发": { abbr: "DEV", color: "bg-emerald-100 text-emerald-600" },
   "测试验证": { abbr: "QA", color: "bg-cyan-100 text-cyan-600" },
+  "质量审查": { abbr: "QA", color: "bg-violet-100 text-violet-600" },
+  "工业设计": { abbr: "ID", color: "bg-pink-100 text-pink-600" },
+  "结构工程": { abbr: "MD", color: "bg-orange-100 text-orange-600" },
 };
 
 export default function MissionControl() {
@@ -498,10 +503,13 @@ function TaskCard({
       )}
 
       {/* Status Meta */}
-      {(task.status === "review" || hasReviewComment || reviewer) && (
+      {(task.status === "review" || task.status === "blocked" || hasReviewComment || reviewer) && (
         <div className="mb-2.5 space-y-1">
           {task.status === "review" && (
-            <div className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide">待审查</div>
+            <div className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide">⏳ 待审查</div>
+          )}
+          {task.status === "blocked" && (
+            <div className="text-[10px] font-semibold text-rose-500 uppercase tracking-wide">🚫 阻塞中</div>
           )}
           {reviewer && (
             <div className="text-[10px] text-stone-400">审查人: {reviewer.name}</div>
