@@ -1,0 +1,131 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --mc-bg: #0a0e17;
+  --mc-panel: #111827;
+  --mc-border: #1e293b;
+  --mc-text: #e2e8f0;
+  --mc-muted: #64748b;
+  --mc-accent: #00d4ff;
+  --mc-accent-dim: #0891b2;
+  --mc-success: #10b981;
+  --mc-warning: #f59e0b;
+  --mc-danger: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--mc-bg);
+  color: var(--mc-text);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--mc-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--mc-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--mc-accent-dim);
+}
+
+/* Glow effects */
+.glow-text {
+  text-shadow: 0 0 10px var(--mc-accent), 0 0 20px var(--mc-accent), 0 0 30px var(--mc-accent);
+}
+
+.glow-border {
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.3), inset 0 0 10px rgba(0, 212, 255, 0.1);
+}
+
+/* Grid pattern background */
+.grid-pattern {
+  background-image: 
+    linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Scan line effect */
+.scan-line::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--mc-accent), transparent);
+  animation: scan 4s linear infinite;
+  opacity: 0.5;
+}
+
+@keyframes scan {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(100vh); }
+}
+
+/* Status indicator pulse */
+.status-pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Panel hover effect */
+.panel-hover {
+  transition: all 0.3s ease;
+}
+
+.panel-hover:hover {
+  border-color: var(--mc-accent);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+}
+
+/* Button styles */
+.btn-primary {
+  @apply px-4 py-2 bg-mc-accent/20 border border-mc-accent text-mc-accent font-medium rounded;
+  @apply hover:bg-mc-accent/30 hover:shadow-glow transition-all duration-200;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 bg-mc-panel border border-mc-border text-mc-text rounded;
+  @apply hover:border-mc-accent/50 transition-all duration-200;
+}
+
+/* Input styles */
+.input-field {
+  @apply w-full px-4 py-2 bg-mc-bg border border-mc-border rounded text-mc-text;
+  @apply focus:outline-none focus:border-mc-accent focus:shadow-glow-sm transition-all duration-200;
+}
+
+/* Card styles */
+.card {
+  @apply bg-mc-panel border border-mc-border rounded-lg p-4;
+}
+
+.card-hover {
+  @apply card panel-hover cursor-pointer;
+}
