@@ -35,7 +35,12 @@ export const ASSETS = {
     renders: [],
   },
   cad: [
-    { name: "arm-mount-v1.step", path: "cad/arm-mount-v1.step", format: "STEP" },
+    { 
+      name: "arm-mount-v1", 
+      step: "cad/bracket/arm-mount-v1.step",
+      gltf: "cad/bracket/arm-mount-v1.gltf",
+      hasPreview: true 
+    },
   ],
 };
 
