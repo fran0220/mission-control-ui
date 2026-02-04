@@ -1,22 +1,105 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ASSETS, getObjectUrl } from "@/lib/minio";
+import { getObjectUrl, MINIO_URL, BUCKET } from "@/lib/minio";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
+interface CadFile {
+  name: string;
+  step: string;
+  glb: string;
+  hasPreview: boolean;
+}
+
+// 从 MinIO XML 列表解析 CAD 文件
+async function fetchCadFiles(): Promise<CadFile[]> {
+  try {
+    const res = await fetch(`${MINIO_URL}/${BUCKET}?prefix=cad/&delimiter=/`, {
+      cache: "no-store",
+    });
+    const text = await res.text();
+    
+    // 解析 XML 获取所有文件
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(text, "text/xml");
+    
+    // 递归获取所有子目录
+    const prefixes = Array.from(xml.querySelectorAll("CommonPrefixes > Prefix"));
+    const allFiles: string[] = [];
+    
+    for (const prefix of prefixes) {
+      const subRes = await fetch(`${MINIO_URL}/${BUCKET}?prefix=${prefix.textContent}`, {
+        cache: "no-store",
+      });
+      const subText = await subRes.text();
+      const subXml = parser.parseFromString(subText, "text/xml");
+      const contents = subXml.querySelectorAll("Contents > Key");
+      contents.forEach((c) => allFiles.push(c.textContent || ""));
+    }
+    
+    // 也获取根目录文件
+    const rootRes = await fetch(`${MINIO_URL}/${BUCKET}?prefix=cad/`, {
+      cache: "no-store",
+    });
+    const rootText = await rootRes.text();
+    const rootXml = parser.parseFromString(rootText, "text/xml");
+    rootXml.querySelectorAll("Contents > Key").forEach((c) => {
+      const key = c.textContent || "";
+      if (!allFiles.includes(key)) allFiles.push(key);
+    });
+    
+    // 匹配 .step 和 .glb 文件
+    const stepFiles = allFiles.filter((f) => f.endsWith(".step"));
+    const glbFiles = allFiles.filter((f) => f.endsWith(".glb"));
+    
+    const cadFiles: CadFile[] = stepFiles.map((step) => {
+      const baseName = step.replace(".step", "");
+      const glb = baseName + ".glb";
+      const hasPreview = glbFiles.includes(glb);
+      const name = step.split("/").pop()?.replace(".step", "") || step;
+      
+      return {
+        name: formatName(name),
+        step,
+        glb,
+        hasPreview,
+      };
+    });
+    
+    return cadFiles;
+  } catch (e) {
+    console.error("Failed to fetch CAD files:", e);
+    return [];
+  }
+}
+
+function formatName(filename: string): string {
+  // go-module-housing → 围棋模块外壳
+  const nameMap: Record<string, string> = {
+    "go-module-housing": "围棋模块外壳",
+    "go-module-arm": "围棋模块机械臂",
+  };
+  return nameMap[filename] || filename.replace(/-/g, " ");
+}
+
 export default function CadPage() {
+  const [cadFiles, setCadFiles] = useState<CadFile[]>([]);
   const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<{ cleanup: () => void } | null>(null);
 
-  const cadFiles = ASSETS.cad;
-
+  // 动态加载 CAD 文件列表
   useEffect(() => {
-    if (cadFiles.length > 0 && cadFiles[0].hasPreview) {
-      setActiveModel(cadFiles[0].gltf);
-    }
+    fetchCadFiles().then((files) => {
+      setCadFiles(files);
+      setLoading(false);
+      if (files.length > 0 && files[0].hasPreview) {
+        setActiveModel(files[0].glb);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -63,12 +146,12 @@ export default function CadPage() {
     const gridHelper = new THREE.GridHelper(200, 20, 0xcccccc, 0xe0e0e0);
     scene.add(gridHelper);
 
-    // 加载 GLTF
+    // 加载 GLB
     const loader = new GLTFLoader();
-    const gltfUrl = getObjectUrl(activeModel);
+    const glbUrl = getObjectUrl(activeModel);
     
     loader.load(
-      gltfUrl,
+      glbUrl,
       (gltf) => {
         const model = gltf.scene;
         
@@ -99,7 +182,7 @@ export default function CadPage() {
       },
       undefined,
       (error) => {
-        console.error("加载 GLTF 失败:", error);
+        console.error("加载 GLB 失败:", error);
       }
     );
 
@@ -146,19 +229,21 @@ export default function CadPage() {
             <h2 className="text-sm font-semibold text-stone-500 uppercase tracking-wide mb-3">
               🔧 CAD 文件
             </h2>
-            {cadFiles.length === 0 ? (
+            {loading ? (
+              <p className="text-stone-400 text-sm">加载中...</p>
+            ) : cadFiles.length === 0 ? (
               <p className="text-stone-400 text-sm">暂无文件</p>
             ) : (
               <ul className="space-y-2">
                 {cadFiles.map((file) => (
                   <li
-                    key={file.name}
+                    key={file.step}
                     className={`p-3 rounded-lg border transition-colors cursor-pointer ${
-                      activeModel === file.gltf
+                      activeModel === file.glb
                         ? "border-emerald-500 bg-emerald-50"
                         : "border-stone-200 hover:bg-stone-50"
                     }`}
-                    onClick={() => file.hasPreview && setActiveModel(file.gltf)}
+                    onClick={() => file.hasPreview && setActiveModel(file.glb)}
                   >
                     <p className="font-medium text-stone-700 text-sm">{file.name}</p>
                     <div className="flex gap-2 mt-2">
@@ -170,9 +255,13 @@ export default function CadPage() {
                       >
                         📥 STEP
                       </a>
-                      {file.hasPreview && (
+                      {file.hasPreview ? (
                         <span className="text-xs px-2 py-1 bg-emerald-100 text-emerald-700 rounded">
                           3D 预览
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded">
+                          转换中...
                         </span>
                       )}
                     </div>
@@ -196,6 +285,9 @@ export default function CadPage() {
         <main className="col-span-12 md:col-span-9 bg-white border border-stone-200 rounded-lg overflow-hidden">
           <div className="h-12 px-4 flex items-center border-b border-stone-200 bg-stone-50">
             <span className="text-sm font-semibold text-stone-500">3D 预览</span>
+            <span className="ml-auto text-xs text-stone-400">
+              {cadFiles.length} 个模型
+            </span>
           </div>
           <div ref={viewerRef} className="w-full h-[600px]" />
         </main>

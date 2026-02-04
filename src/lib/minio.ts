@@ -1,8 +1,8 @@
 // MinIO 公共访问 URL 工具（客户端安全）
 // Bucket 已设置为 public download，直接通过 HTTP 访问
 
-const MINIO_URL = process.env.NEXT_PUBLIC_MINIO_URL || "https://minio-production-e654.up.railway.app";
-const BUCKET = process.env.NEXT_PUBLIC_MINIO_BUCKET || "team-assets";
+export const MINIO_URL = process.env.NEXT_PUBLIC_MINIO_URL || "https://minio-production-e654.up.railway.app";
+export const BUCKET = process.env.NEXT_PUBLIC_MINIO_BUCKET || "team-assets";
 
 export function getObjectUrl(objectName: string) {
   return `${MINIO_URL}/${BUCKET}/${objectName}`;
