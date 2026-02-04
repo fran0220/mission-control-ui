@@ -3,7 +3,10 @@
  * Replaces Convex React hooks with direct HTTP calls
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_CONVEX_URL || "https://convex-backend-production-3dbe.up.railway.app";
+const rawUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+const API_BASE = (rawUrl && rawUrl !== "undefined" && rawUrl !== "null")
+  ? rawUrl
+  : "https://convex-backend-production-3dbe.up.railway.app";
 
 async function query<T>(path: string, args: Record<string, any> = {}): Promise<T> {
   const response = await fetch(`${API_BASE}/api/query`, {
