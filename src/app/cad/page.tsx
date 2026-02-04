@@ -30,7 +30,9 @@ async function fetchCadFiles(): Promise<CadFile[]> {
     const allFiles: string[] = [];
     
     for (const prefix of prefixes) {
-      const subRes = await fetch(`${MINIO_URL}/${BUCKET}?prefix=${prefix.textContent}`, {
+      const prefixValue = prefix.textContent ?? "";
+      if (!prefixValue) continue;
+      const subRes = await fetch(`${MINIO_URL}/${BUCKET}?prefix=${prefixValue}`, {
         cache: "no-store",
       });
       const subText = await subRes.text();
