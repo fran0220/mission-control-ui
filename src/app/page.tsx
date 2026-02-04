@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import {
   DndContext,
   DragOverlay,
@@ -437,42 +438,57 @@ export default function MissionControl() {
           </div>
 
           {/* Kanban Board */}
-          <div className="flex-1 overflow-x-auto overflow-y-hidden">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
+          <div className="flex-1 overflow-hidden">
+            <TransformWrapper
+              minScale={0.5}
+              maxScale={2}
+              wheel={{
+                step: 0.1,
+                excluded: ["[data-dnd-handle]", "button", "a", "input", "textarea", "select", "[role=button]"]
+              }}
+              panning={{ excluded: ["[data-dnd-handle]", "button", "a", "input", "textarea", "select", "[role=button]"] }}
             >
-              <div className="flex h-full p-4 gap-3 min-w-max">
-                {statusColumns.map((col) => {
-                  const columnTasks = (tasks || []).filter((task: any) => getDisplayStatus(task) === col.key);
-                  return (
-                    <TaskColumn
-                      key={col.key}
-                      column={col}
-                      tasks={columnTasks}
-                      agents={agents}
-                      onReview={(task, decision) => {
-                        setReviewTarget(task);
-                        setReviewDecision(decision);
-                        setReviewModalOpen(true);
-                      }}
-                    />
-                  );
-                })}
-              </div>
-              <DragOverlay>
-                {activeTask ? (
-                  <TaskCard
-                    task={activeTask}
-                    agents={agents}
-                    onReview={() => undefined}
-                    isOverlay
-                  />
-                ) : null}
-              </DragOverlay>
-            </DndContext>
+              <TransformComponent
+                wrapperStyle={{ width: "100%", height: "100%" }}
+                contentStyle={{ minHeight: "100%" }}
+              >
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                >
+                  <div className="flex h-full p-4 gap-3 min-w-max">
+                    {statusColumns.map((col) => {
+                      const columnTasks = (tasks || []).filter((task: any) => getDisplayStatus(task) === col.key);
+                      return (
+                        <TaskColumn
+                          key={col.key}
+                          column={col}
+                          tasks={columnTasks}
+                          agents={agents}
+                          onReview={(task, decision) => {
+                            setReviewTarget(task);
+                            setReviewDecision(decision);
+                            setReviewModalOpen(true);
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <DragOverlay>
+                    {activeTask ? (
+                      <TaskCard
+                        task={activeTask}
+                        agents={agents}
+                        onReview={() => undefined}
+                        isOverlay
+                      />
+                    ) : null}
+                  </DragOverlay>
+                </DndContext>
+              </TransformComponent>
+            </TransformWrapper>
           </div>
         </main>
 
@@ -869,6 +885,7 @@ function TaskCard({
   return (
     <div
       {...dragHandleProps}
+      data-dnd-handle={dragHandleProps ? "true" : undefined}
       className={`rounded-xl border p-3 transition-all group ${
         isBlocked ? "border-rose-400 bg-rose-50/40" : "border-stone-200 bg-white"
       } ${

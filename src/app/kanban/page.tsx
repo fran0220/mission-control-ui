@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import { AnimatePresence, motion } from "framer-motion";
+import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
+import { useActivities, useAgents, useQuickCreate, useTasks, useUpdateStatus } from "@/hooks/useApi";
 import {
   Activity,
   ChevronRight,
@@ -272,11 +272,11 @@ const TaskCard = ({
 };
 
 const KanbanBoard = () => {
-  const tasks = useQuery(api.tasks.list);
-  const agents = useQuery(api.agents.list);
-  const activities = useQuery(api.activities.getRecent, { limit: 30 });
-  const updateStatus = useMutation(api.tasks.updateStatus);
-  const quickCreate = useMutation(api.tasks.quickCreate);
+  const tasks = useTasks();
+  const agents = useAgents();
+  const activities = useActivities(30);
+  const { mutate: updateStatus } = useUpdateStatus();
+  const { mutate: quickCreate } = useQuickCreate();
 
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
@@ -535,56 +535,76 @@ const KanbanBoard = () => {
 
           <div className="flex-1 overflow-hidden">
             <div className="h-full overflow-x-auto">
-              <div className="flex h-full gap-4 px-4 py-4 min-w-max">
-                {flowStatuses.map((status) => {
-                  const meta = statusMeta[status];
-                  const list = tasksByStatus[status] || [];
-                  return (
-                    <motion.section
-                      layout
-                      key={status}
-                      className={`w-[320px] flex flex-col rounded-2xl border ${meta.tone} bg-white/80 shadow-sm`}
-                    >
-                      <div className="px-4 py-3 border-b border-stone-100">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h3 className="text-sm font-semibold text-stone-700">{meta.label}</h3>
-                            <p className="text-[10px] text-stone-400 mt-0.5">{meta.description}</p>
+              <TransformWrapper
+                minScale={0.5}
+                maxScale={2}
+                wheel={{ step: 0.1, excluded: ["button", "a", "input", "textarea", "select", "[role=button]"] }}
+                panning={{ excluded: ["button", "a", "input", "textarea", "select", "[role=button]"] }}
+              >
+                <TransformComponent
+                  wrapperStyle={{ width: "100%", height: "100%" }}
+                  contentStyle={{ minHeight: "100%" }}
+                >
+                  <div
+                    className="flex h-full gap-4 px-4 py-4 min-w-max"
+                    onMouseDown={(event) => {
+                      const target = event.target as HTMLElement;
+                      if (target.closest("button, a, input, textarea, select, [role=button]")) {
+                        event.stopPropagation();
+                      }
+                    }}
+                  >
+                    {flowStatuses.map((status) => {
+                      const meta = statusMeta[status];
+                      const list = tasksByStatus[status] || [];
+                      return (
+                        <motion.section
+                          layout
+                          key={status}
+                          className={`w-[320px] flex flex-col rounded-2xl border ${meta.tone} bg-white/80 shadow-sm`}
+                        >
+                          <div className="px-4 py-3 border-b border-stone-100">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <h3 className="text-sm font-semibold text-stone-700">{meta.label}</h3>
+                                <p className="text-[10px] text-stone-400 mt-0.5">{meta.description}</p>
+                              </div>
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full border ${meta.tone} ${meta.accent}`}>
+                                {list.length}
+                              </span>
+                            </div>
                           </div>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${meta.tone} ${meta.accent}`}>
-                            {list.length}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
-                        <AnimatePresence mode="popLayout">
-                          {list.map((task: any) => {
-                            const currentStatus = getDisplayStatus(task);
-                            const prevStatus = getPrevStatus(currentStatus);
-                            const nextStatus = getNextStatus(currentStatus);
-                            return (
-                              <TaskCard
-                                key={task._id}
-                                task={task}
-                                agents={agents}
-                                onOpen={() => setDetailTask(task)}
-                                onPrev={() => prevStatus && handleMoveStatus(task, prevStatus)}
-                                onNext={() => nextStatus && handleMoveStatus(task, nextStatus)}
-                                onToggleBlocked={() => handleToggleBlocked(task)}
-                                prevStatus={prevStatus}
-                                nextStatus={nextStatus}
-                              />
-                            );
-                          })}
-                        </AnimatePresence>
-                        {list.length === 0 && (
-                          <div className="text-center py-10 text-xs text-stone-300">暂无任务</div>
-                        )}
-                      </div>
-                    </motion.section>
-                  );
-                })}
-              </div>
+                          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+                            <AnimatePresence mode="popLayout">
+                              {list.map((task: any) => {
+                                const currentStatus = getDisplayStatus(task);
+                                const prevStatus = getPrevStatus(currentStatus);
+                                const nextStatus = getNextStatus(currentStatus);
+                                return (
+                                  <TaskCard
+                                    key={task._id}
+                                    task={task}
+                                    agents={agents}
+                                    onOpen={() => setDetailTask(task)}
+                                    onPrev={() => prevStatus && handleMoveStatus(task, prevStatus)}
+                                    onNext={() => nextStatus && handleMoveStatus(task, nextStatus)}
+                                    onToggleBlocked={() => handleToggleBlocked(task)}
+                                    prevStatus={prevStatus}
+                                    nextStatus={nextStatus}
+                                  />
+                                );
+                              })}
+                            </AnimatePresence>
+                            {list.length === 0 && (
+                              <div className="text-center py-10 text-xs text-stone-300">暂无任务</div>
+                            )}
+                          </div>
+                        </motion.section>
+                      );
+                    })}
+                  </div>
+                </TransformComponent>
+              </TransformWrapper>
             </div>
           </div>
         </main>
