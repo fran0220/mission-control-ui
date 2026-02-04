@@ -867,6 +867,20 @@ const KanbanBoard = () => {
   );
 };
 
+import dynamic from "next/dynamic";
+
+const DynamicKanbanBoard = dynamic(() => Promise.resolve(KanbanBoard), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-screen bg-stone-50">
+      <div className="text-center">
+        <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-stone-500">加载看板...</p>
+      </div>
+    </div>
+  ),
+});
+
 export default function KanbanPage() {
-  return <KanbanBoard />;
+  return <DynamicKanbanBoard />;
 }
