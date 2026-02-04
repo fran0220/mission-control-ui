@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import { TransformComponent, TransformWrapper, useControls } from "react-zoom-pan-pinch";
 import { useActivities, useAgents, useQuickCreate, useTasks, useUpdateStatus } from "@/hooks/useApi";
@@ -866,8 +867,6 @@ const KanbanBoard = () => {
     </div>
   );
 };
-
-import dynamic from "next/dynamic";
 
 const DynamicKanbanBoard = dynamic(() => Promise.resolve(KanbanBoard), {
   ssr: false,
