@@ -38,13 +38,13 @@ export const ASSETS = {
     { 
       name: "围棋模块外壳", 
       step: "cad/go-module/go-module-housing.step",
-      gltf: "cad/go-module/go-module-housing.gltf",
+      gltf: "cad/go-module/go-module-housing.glb",
       hasPreview: true 
     },
     { 
       name: "围棋模块机械臂", 
       step: "cad/go-module/go-module-arm.step",
-      gltf: "cad/go-module/go-module-arm.gltf",
+      gltf: "cad/go-module/go-module-arm.glb",
       hasPreview: true 
     },
   ],
