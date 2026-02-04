@@ -2,15 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
+import { TransformComponent, TransformWrapper, useControls } from "react-zoom-pan-pinch";
 import { useActivities, useAgents, useQuickCreate, useTasks, useUpdateStatus } from "@/hooks/useApi";
 import {
   Activity,
   ChevronRight,
   Clock,
+  Maximize,
+  Minus,
   PanelLeftClose,
   PanelRightClose,
   Plus,
+  RotateCcw,
   Users,
   Zap,
 } from "lucide-react";
@@ -271,6 +274,36 @@ const TaskCard = ({
   );
 };
 
+const ZoomControls = () => {
+  const { zoomIn, zoomOut, resetTransform } = useControls();
+  return (
+    <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm border border-stone-200 rounded-full px-2 py-1 shadow-sm">
+      <button
+        onClick={() => zoomIn()}
+        className="p-1.5 hover:bg-stone-100 rounded-full text-stone-500 transition-colors"
+        title="放大"
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+      <button
+        onClick={() => zoomOut()}
+        className="p-1.5 hover:bg-stone-100 rounded-full text-stone-500 transition-colors"
+        title="缩小"
+      >
+        <Minus className="w-3.5 h-3.5" />
+      </button>
+      <div className="w-px h-3 bg-stone-200 mx-0.5" />
+      <button
+        onClick={() => resetTransform()}
+        className="p-1.5 hover:bg-stone-100 rounded-full text-stone-500 transition-colors"
+        title="重置视角"
+      >
+        <RotateCcw className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+};
+
 const KanbanBoard = () => {
   const tasks = useTasks();
   const agents = useAgents();
@@ -524,110 +557,89 @@ const KanbanBoard = () => {
               <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Mission Kanban</span>
             </div>
             <span className="text-[10px] text-stone-400">状态流转看板</span>
-            <button
-              onClick={() => setQuickCreateOpen(true)}
-              className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-stone-100 text-stone-600 hover:bg-stone-200 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              快速创建
-            </button>
+            <div className="ml-auto flex items-center gap-3">
+              <ZoomControls />
+              <button
+                onClick={() => setQuickCreateOpen(true)}
+                className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-stone-100 text-stone-600 hover:bg-stone-200 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                快速创建
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-hidden relative">
             <TransformWrapper
-              minScale={0.5}
+              minScale={0.3}
               maxScale={2}
               initialScale={1}
               centerOnInit={false}
-              wheel={{ step: 0.1 }}
+              wheel={{ step: 0.1, wheelDisabled: false }}
               panning={{ 
                 disabled: false,
-                excluded: ["input", "textarea", "select", "option"] 
+                wheelPanning: true,
+                allowLeftClickPan: true,
+                excluded: ["button", "a", "input", "textarea", "select", "[role=button]"] 
               }}
               limitToBounds={false}
+              centerZoomedOut={false}
             >
-              {({ zoomIn, zoomOut, resetTransform }) => (
-                <>
-                  <div className="absolute bottom-6 right-6 z-[60] flex flex-col gap-2">
-                    <button
-                      onClick={() => zoomIn()}
-                      className="w-10 h-10 rounded-full bg-white border border-stone-200 shadow-lg flex items-center justify-center text-stone-600 hover:bg-stone-50 transition-colors"
-                      title="放大"
-                    >
-                      <Plus className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => zoomOut()}
-                      className="w-10 h-10 rounded-full bg-white border border-stone-200 shadow-lg flex items-center justify-center text-stone-600 hover:bg-stone-50 transition-colors"
-                      title="缩小"
-                    >
-                      <div className="w-4 h-0.5 bg-current rounded-full" />
-                    </button>
-                    <button
-                      onClick={() => resetTransform()}
-                      className="w-10 h-10 rounded-full bg-white border border-stone-200 shadow-lg flex items-center justify-center text-[10px] font-bold text-stone-500 hover:bg-stone-50 transition-colors"
-                      title="复位"
-                    >
-                      1:1
-                    </button>
-                  </div>
-                  <TransformComponent
-                    wrapperStyle={{ width: "100%", height: "100%" }}
-                    contentStyle={{ minHeight: "100%", cursor: "grab" }}
-                  >
-                    <div className="flex h-full gap-4 px-4 py-4 min-w-max">
-                      {flowStatuses.map((status) => {
-                      const meta = statusMeta[status];
-                      const list = tasksByStatus[status] || [];
-                      return (
-                        <motion.section
-                          layout
-                          key={status}
-                          className={`w-[320px] flex flex-col rounded-2xl border ${meta.tone} bg-white/80 shadow-sm`}
-                        >
-                          <div className="px-4 py-3 border-b border-stone-100">
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <h3 className="text-sm font-semibold text-stone-700">{meta.label}</h3>
-                                <p className="text-[10px] text-stone-400 mt-0.5">{meta.description}</p>
-                              </div>
-                              <span className={`text-[10px] px-2 py-0.5 rounded-full border ${meta.tone} ${meta.accent}`}>
-                                {list.length}
-                              </span>
+              <TransformComponent
+                wrapperStyle={{ width: "100%", height: "100%", cursor: "grab" }}
+                contentStyle={{ minHeight: "100%", padding: "40px" }}
+              >
+                <div className="flex h-full gap-6 min-w-max">
+                  {flowStatuses.map((status) => {
+                    const meta = statusMeta[status];
+                    const list = tasksByStatus[status] || [];
+                    return (
+                      <motion.section
+                        layout
+                        key={status}
+                        className={`w-[320px] flex flex-col rounded-2xl border ${meta.tone} bg-white/80 shadow-sm`}
+                      >
+                        <div className="px-4 py-3 border-b border-stone-100">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <h3 className="text-sm font-semibold text-stone-700">{meta.label}</h3>
+                              <p className="text-[10px] text-stone-400 mt-0.5">{meta.description}</p>
                             </div>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border ${meta.tone} ${meta.accent}`}>
+                              {list.length}
+                            </span>
                           </div>
-                          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
-                            <AnimatePresence mode="popLayout">
-                              {list.map((task: any) => {
-                                const currentStatus = getDisplayStatus(task);
-                                const prevStatus = getPrevStatus(currentStatus);
-                                const nextStatus = getNextStatus(currentStatus);
-                                return (
-                                  <TaskCard
-                                    key={task._id}
-                                    task={task}
-                                    agents={agents}
-                                    onOpen={() => setDetailTask(task)}
-                                    onPrev={() => prevStatus && handleMoveStatus(task, prevStatus)}
-                                    onNext={() => nextStatus && handleMoveStatus(task, nextStatus)}
-                                    onToggleBlocked={() => handleToggleBlocked(task)}
-                                    prevStatus={prevStatus}
-                                    nextStatus={nextStatus}
-                                  />
-                                );
-                              })}
-                            </AnimatePresence>
-                            {list.length === 0 && (
-                              <div className="text-center py-10 text-xs text-stone-300">暂无任务</div>
-                            )}
-                          </div>
-                        </motion.section>
-                      );
-                    })}
-                  </div>
-                </TransformComponent>
-              </>
-            )}
+                        </div>
+                        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+                          <AnimatePresence mode="popLayout">
+                            {list.map((task: any) => {
+                              const currentStatus = getDisplayStatus(task);
+                              const prevStatus = getPrevStatus(currentStatus);
+                              const nextStatus = getNextStatus(currentStatus);
+                              return (
+                                <TaskCard
+                                  key={task._id}
+                                  task={task}
+                                  agents={agents}
+                                  onOpen={() => setDetailTask(task)}
+                                  onPrev={() => prevStatus && handleMoveStatus(task, prevStatus)}
+                                  onNext={() => nextStatus && handleMoveStatus(task, nextStatus)}
+                                  onToggleBlocked={() => handleToggleBlocked(task)}
+                                  prevStatus={prevStatus}
+                                  nextStatus={nextStatus}
+                                />
+                              );
+                            })}
+                          </AnimatePresence>
+                          {list.length === 0 && (
+                            <div className="text-center py-10 text-xs text-stone-300">暂无任务</div>
+                          )}
+                        </div>
+                      </motion.section>
+                    );
+                  })}
+                </div>
+              </TransformComponent>
             </TransformWrapper>
           </div>
         </main>

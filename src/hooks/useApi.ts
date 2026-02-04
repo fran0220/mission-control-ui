@@ -3,30 +3,37 @@
  */
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { tasksApi, agentsApi, activitiesApi } from "@/lib/api";
 
 // Generic hook for polling data
 function usePollingQuery<T>(
   fetcher: () => Promise<T>,
   intervalMs: number = 5000
-): T | undefined {
+): { data: T | undefined; error: Error | null; loading: boolean } {
   const [data, setData] = useState<T | undefined>(undefined);
   const [error, setError] = useState<Error | null>(null);
+  const [loading, setLoading] = useState(true);
+  const fetcherRef = useRef(fetcher);
+  
+  // Update ref when fetcher changes
+  fetcherRef.current = fetcher;
 
   useEffect(() => {
     let mounted = true;
     
     const fetchData = async () => {
       try {
-        const result = await fetcher();
+        const result = await fetcherRef.current();
         if (mounted) {
           setData(result);
           setError(null);
+          setLoading(false);
         }
       } catch (e) {
         if (mounted) {
           setError(e as Error);
+          setLoading(false);
           console.error("API fetch error:", e);
         }
       }
@@ -42,25 +49,28 @@ function usePollingQuery<T>(
       mounted = false;
       clearInterval(interval);
     };
-  }, [fetcher, intervalMs]);
+  }, [intervalMs]); // Only depend on intervalMs, use ref for fetcher
 
-  return data;
+  return { data, error, loading };
 }
 
 // Hook for tasks list
 export function useTasks() {
-  return usePollingQuery(() => tasksApi.list(), 3000);
+  const { data } = usePollingQuery(() => tasksApi.list(), 3000);
+  return data;
 }
 
-// Hook for agents list
+// Hook for agents list  
 export function useAgents() {
-  return usePollingQuery(() => agentsApi.list(), 10000);
+  const { data } = usePollingQuery(() => agentsApi.list(), 10000);
+  return data;
 }
 
 // Hook for activities
 export function useActivities(limit: number = 30) {
   const fetcher = useCallback(() => activitiesApi.getRecent({ limit }), [limit]);
-  return usePollingQuery(fetcher, 5000);
+  const { data } = usePollingQuery(fetcher, 5000);
+  return data;
 }
 
 // Mutation hooks
