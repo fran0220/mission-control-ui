@@ -36,9 +36,15 @@ export const ASSETS = {
   },
   cad: [
     { 
-      name: "arm-mount-v1", 
-      step: "cad/bracket/arm-mount-v1.step",
-      gltf: "cad/bracket/arm-mount-v1.gltf",
+      name: "围棋模块外壳", 
+      step: "cad/go-module/go-module-housing.step",
+      gltf: "cad/go-module/go-module-housing.gltf",
+      hasPreview: true 
+    },
+    { 
+      name: "围棋模块机械臂", 
+      step: "cad/go-module/go-module-arm.step",
+      gltf: "cad/go-module/go-module-arm.gltf",
       hasPreview: true 
     },
   ],
