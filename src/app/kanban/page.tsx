@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
-import { TransformComponent, TransformWrapper, useControls } from "react-zoom-pan-pinch";
+import { TransformComponent, TransformWrapper, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 import { useActivities, useAgents, useQuickCreate, useTasks, useUpdateStatus } from "@/hooks/useApi";
 import {
   Activity,
@@ -275,19 +275,22 @@ const TaskCard = ({
   );
 };
 
-const ZoomControls = () => {
-  const { zoomIn, zoomOut, resetTransform } = useControls();
+const ZoomControls = ({ transformRef }: { transformRef: React.RefObject<any> }) => {
+  const handleZoomIn = () => transformRef.current?.zoomIn();
+  const handleZoomOut = () => transformRef.current?.zoomOut();
+  const handleReset = () => transformRef.current?.resetTransform();
+  
   return (
     <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm border border-stone-200 rounded-full px-2 py-1 shadow-sm">
       <button
-        onClick={() => zoomIn()}
+        onClick={handleZoomIn}
         className="p-1.5 hover:bg-stone-100 rounded-full text-stone-500 transition-colors"
         title="放大"
       >
         <Plus className="w-3.5 h-3.5" />
       </button>
       <button
-        onClick={() => zoomOut()}
+        onClick={handleZoomOut}
         className="p-1.5 hover:bg-stone-100 rounded-full text-stone-500 transition-colors"
         title="缩小"
       >
@@ -295,7 +298,7 @@ const ZoomControls = () => {
       </button>
       <div className="w-px h-3 bg-stone-200 mx-0.5" />
       <button
-        onClick={() => resetTransform()}
+        onClick={handleReset}
         className="p-1.5 hover:bg-stone-100 rounded-full text-stone-500 transition-colors"
         title="重置视角"
       >
@@ -311,6 +314,7 @@ const KanbanBoard = () => {
   const activities = useActivities(30);
   const { mutate: updateStatus } = useUpdateStatus();
   const { mutate: quickCreate } = useQuickCreate();
+  const transformRef = useRef<ReactZoomPanPinchRef>(null);
 
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
@@ -559,7 +563,7 @@ const KanbanBoard = () => {
             </div>
             <span className="text-[10px] text-stone-400">状态流转看板</span>
             <div className="ml-auto flex items-center gap-3">
-              <ZoomControls />
+              <ZoomControls transformRef={transformRef} />
               <button
                 onClick={() => setQuickCreateOpen(true)}
                 className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-stone-100 text-stone-600 hover:bg-stone-200 transition-colors"
@@ -572,6 +576,7 @@ const KanbanBoard = () => {
 
           <div className="flex-1 overflow-hidden relative">
             <TransformWrapper
+              ref={transformRef}
               minScale={0.3}
               maxScale={2}
               initialScale={1}
