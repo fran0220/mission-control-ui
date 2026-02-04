@@ -533,28 +533,50 @@ const KanbanBoard = () => {
             </button>
           </div>
 
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-x-auto">
-              <TransformWrapper
-                minScale={0.5}
-                maxScale={2}
-                wheel={{ step: 0.1, excluded: ["button", "a", "input", "textarea", "select", "[role=button]"] }}
-                panning={{ excluded: ["button", "a", "input", "textarea", "select", "[role=button]"] }}
-              >
-                <TransformComponent
-                  wrapperStyle={{ width: "100%", height: "100%" }}
-                  contentStyle={{ minHeight: "100%" }}
-                >
-                  <div
-                    className="flex h-full gap-4 px-4 py-4 min-w-max"
-                    onMouseDown={(event) => {
-                      const target = event.target as HTMLElement;
-                      if (target.closest("button, a, input, textarea, select, [role=button]")) {
-                        event.stopPropagation();
-                      }
-                    }}
+          <div className="flex-1 overflow-hidden relative">
+            <TransformWrapper
+              minScale={0.5}
+              maxScale={2}
+              initialScale={1}
+              centerOnInit={false}
+              wheel={{ step: 0.1 }}
+              panning={{ 
+                disabled: false,
+                excluded: ["input", "textarea", "select", "option"] 
+              }}
+              limitToBounds={false}
+            >
+              {({ zoomIn, zoomOut, resetTransform }) => (
+                <>
+                  <div className="absolute bottom-6 right-6 z-[60] flex flex-col gap-2">
+                    <button
+                      onClick={() => zoomIn()}
+                      className="w-10 h-10 rounded-full bg-white border border-stone-200 shadow-lg flex items-center justify-center text-stone-600 hover:bg-stone-50 transition-colors"
+                      title="放大"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => zoomOut()}
+                      className="w-10 h-10 rounded-full bg-white border border-stone-200 shadow-lg flex items-center justify-center text-stone-600 hover:bg-stone-50 transition-colors"
+                      title="缩小"
+                    >
+                      <div className="w-4 h-0.5 bg-current rounded-full" />
+                    </button>
+                    <button
+                      onClick={() => resetTransform()}
+                      className="w-10 h-10 rounded-full bg-white border border-stone-200 shadow-lg flex items-center justify-center text-[10px] font-bold text-stone-500 hover:bg-stone-50 transition-colors"
+                      title="复位"
+                    >
+                      1:1
+                    </button>
+                  </div>
+                  <TransformComponent
+                    wrapperStyle={{ width: "100%", height: "100%" }}
+                    contentStyle={{ minHeight: "100%", cursor: "grab" }}
                   >
-                    {flowStatuses.map((status) => {
+                    <div className="flex h-full gap-4 px-4 py-4 min-w-max">
+                      {flowStatuses.map((status) => {
                       const meta = statusMeta[status];
                       const list = tasksByStatus[status] || [];
                       return (
@@ -604,8 +626,9 @@ const KanbanBoard = () => {
                     })}
                   </div>
                 </TransformComponent>
-              </TransformWrapper>
-            </div>
+              </>
+            )}
+            </TransformWrapper>
           </div>
         </main>
 
